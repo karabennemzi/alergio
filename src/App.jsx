@@ -514,7 +514,7 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast }) {
 /* ══ SIDEBAR (shared) ══ */
 function Sidebar({ page, setPage, city, setCity, chosen, toggle, sens, setSens, go }) {
   return (
-    <aside style={{ width:280, minWidth:280, background:"#fff", borderRight:"1px solid #EAECF0", height:"100vh", position:"sticky", top:0, overflowY:"auto", display:"flex", flexDirection:"column" }}>
+    <aside style={{ width:280, minWidth:280, background:"#fff", borderRight:"1px solid #EAECF0", height:"100vh", position:"sticky", top:0, overflowY:"auto", display:"flex", flexDirection:"column" }} className="sidebar-inner">
       {/* Logo */}
       <div style={{ padding:"24px 20px 16px", borderBottom:"1px solid #EAECF0" }}>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2 }}>
@@ -610,6 +610,10 @@ export default function App() {
   const toggle = id => setChosen(p => p.includes(id) ? p.filter(x=>x!==id) : [...p,id]);
   const go = () => { if (chosen.length) setForecast(calcForecast(city, chosen, sens)); };
 
+  // On mobile: show results screen OR setup screen (not both)
+  // isMobileResult = mobile + forecast exists + on forecast page
+  const showMobileResults = forecast && page === "forecast";
+
   return (
     <div style={{ minHeight:"100vh", background:"#F8FAF8", fontFamily:"'Inter',system-ui,sans-serif" }}>
       <style>{`
@@ -619,17 +623,105 @@ export default function App() {
         ::-webkit-scrollbar { width:4px; } ::-webkit-scrollbar-track { background:transparent; } ::-webkit-scrollbar-thumb { background:#D1D5DB; border-radius:2px; }
         .card { background:#fff; border-radius:14px; border:1px solid #EAECF0; }
         .lbl { font-size:11px; font-weight:600; color:#9CA3AF; text-transform:uppercase; letter-spacing:.8px; display:block; margin-bottom:8px; }
-        @media (max-width:768px) { .layout { flex-direction:column !important; } .sidebar-el { width:100% !important; min-width:unset !important; height:auto !important; position:static !important; border-right:none !important; border-bottom:1px solid #EAECF0; } .top-grid { grid-template-columns:1fr !important; } .main-grid { grid-template-columns:1fr !important; } }
+
+        /* ── DESKTOP ── */
+        .layout { display:flex; max-width:1440px; margin:0 auto; min-height:100vh; }
+        .sidebar-el { display:block; }
+        .top-grid { grid-template-columns:1fr 1fr 1fr; }
+        .main-grid { grid-template-columns:1.2fr 1fr; }
+        .mobile-nav { display:none; }
+        .mobile-back { display:none; }
+
+        /* ── MOBILE ── */
+        @media (max-width:768px) {
+          .layout { flex-direction:column; }
+
+          /* Mobile nav bar at bottom */
+          .mobile-nav {
+            display:flex;
+            position:fixed; bottom:0; left:0; right:0; z-index:100;
+            background:#fff; border-top:1px solid #EAECF0;
+            padding:8px 0 max(8px, env(safe-area-inset-bottom));
+          }
+          .mobile-nav-btn {
+            flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
+            background:none; border:none; cursor:pointer; padding:4px 0;
+            font-family:'Inter',sans-serif; font-size:10px; font-weight:500;
+            color:#9CA3AF; transition:color .15s;
+          }
+          .mobile-nav-btn.on { color:#166534; }
+
+          /* Sidebar becomes full-screen setup on mobile */
+          .sidebar-el {
+            width:100% !important; min-width:unset !important;
+            height:auto !important; position:static !important;
+            border-right:none !important;
+          }
+          /* Hide sidebar when showing results on mobile */
+          .sidebar-el.hidden-mobile { display:none !important; }
+          /* Hide main results when showing setup on mobile */
+          .main-hidden-mobile { display:none !important; }
+
+          /* Back bar on mobile results */
+          .mobile-back {
+            display:flex;
+            align-items:center; justify-content:space-between;
+            padding:12px 16px;
+            background:#fff; border-bottom:1px solid #EAECF0;
+            position:sticky; top:0; z-index:10;
+          }
+
+          .top-grid { grid-template-columns:1fr !important; }
+          .main-grid { grid-template-columns:1fr !important; }
+
+          /* Add padding for bottom nav */
+          .main-content { padding-bottom:80px !important; }
+          .sidebar-inner { width:100% !important; height:auto !important; position:static !important; }
+          .sidebar-inner aside { padding-bottom:20px; }
+        }
       `}</style>
-      <div className="layout" style={{ display:"flex", maxWidth:1440, margin:"0 auto", minHeight:"100vh" }}>
-        <div className="sidebar-el">
+
+      <div className="layout">
+
+        {/* Sidebar — hidden on mobile when showing results */}
+        <div className={`sidebar-el${showMobileResults ? " hidden-mobile" : ""}`}>
           <Sidebar page={page} setPage={setPage} city={city} setCity={setCity} chosen={chosen} toggle={toggle} sens={sens} setSens={setSens} go={go}/>
         </div>
-        <main style={{ flex:1, overflowY:"auto" }}>
+
+        {/* Main content */}
+        <main className={`main-content${!showMobileResults && page==="forecast" ? " main-hidden-mobile" : ""}`}
+          style={{ flex:1, overflowY:"auto" }}>
+
+          {/* Mobile back bar — only visible on mobile when showing results */}
+          {page === "forecast" && forecast && (
+            <div className="mobile-back">
+              <button onClick={()=>setForecast(null)} style={{ display:"flex", alignItems:"center", gap:8, background:"none", border:"none", cursor:"pointer", fontSize:14, fontWeight:600, color:"#166534", fontFamily:"'Inter',sans-serif" }}>
+                ← Zmeniť nastavenia
+              </button>
+              <button onClick={()=>setForecast(calcForecast(city,chosen,sens))} style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 12px", background:"#F0FDF4", border:"1px solid #86efac", borderRadius:8, fontSize:13, fontWeight:500, color:"#166534", cursor:"pointer", fontFamily:"'Inter',sans-serif" }}>
+                ↺ Obnoviť
+              </button>
+            </div>
+          )}
+
           {page === "forecast" && <ForecastPage city={city} chosen={chosen} sens={sens} forecast={forecast} setForecast={setForecast}/>}
           {page === "almanach" && <AlmanachPage/>}
         </main>
       </div>
+
+      {/* Mobile bottom nav */}
+      <nav className="mobile-nav">
+        {[
+          { id:"forecast", label:"Predpoveď", icon:"📊" },
+          { id:"almanach", label:"Kalendár", icon:"📅" },
+        ].map(n => (
+          <button key={n.id} className={`mobile-nav-btn${page===n.id?" on":""}`}
+            onClick={()=>{ setPage(n.id); if(n.id!=="forecast") setForecast(null); }}>
+            <span style={{ fontSize:22 }}>{n.icon}</span>
+            {n.label}
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
