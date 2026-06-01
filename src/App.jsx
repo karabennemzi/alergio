@@ -6,12 +6,12 @@ import { useState } from "react";
    ══════════════════════════════════════════════════════════════ */
 const POLLEN_DATA = {
   borovica: { label: "Borovica / Ihličnany", short: "Borovica", emoji: "🌲", uroven: "Veľmi vysoká", skore: 5, sezona: true, pelZrn: "2 373 zŕn/m³ (Žilina) · 656 zŕn/m³ (Nitra)", trend: "↘ klesá", komentar: "Dominantný alergén týždňa — viditeľné žlté povlaky na autách a terasách. Ihličnany dokvitajú.", outlook: [4,3,2] },
-  travy:    { label: "Trávy (lipnicovité)",  short: "Trávy",    emoji: "🌾", uroven: "Vysoká",      skore: 4, sezona: true, pelZrn: "rastúce koncentrácie", trend: "↗ rastie", komentar: "Sezóna práve začína — trávy sa stanú dominantným alergénom na najbližšie 2 mesiace.", outlook: [5,5,5] },
-  breza:    { label: "Breza",                short: "Breza",    emoji: "🌳", uroven: "Nízka",        skore: 2, sezona: false, pelZrn: "nízke koncentrácie", trend: "↘ klesá", komentar: "Sezóna brezy sa končí, koncentrácie sú nízke.", outlook: [1,1,1] },
+  travy:    { label: "Trávy (lipnicovité)",  short: "Trávy",    emoji: "🌾", uroven: "Stredná",     skore: 3, sezona: true, pelZrn: "rastúce koncentrácie", trend: "↗ rastie", komentar: "Sezóna práve začína — trávy sa stanú dominantným alergénom na najbližšie 2 mesiace.", outlook: [5,5,5] },
+  breza:    { label: "Breza",                short: "Breza",    emoji: "🌳", uroven: "Veľmi nízka", skore: 1, sezona: false, pelZrn: "nízke koncentrácie", trend: "↘ klesá", komentar: "Sezóna brezy sa končí, koncentrácie sú nízke.", outlook: [1,1,1] },
   lieska:   { label: "Lieska",               short: "Lieska",   emoji: "🌰", uroven: "Veľmi nízka", skore: 1, sezona: false, pelZrn: "stopové množstvá", trend: "— ukončená", komentar: "Sezóna liesky je dávno ukončená.", outlook: [1,1,1] },
   ambrozia: { label: "Ambrózia",             short: "Ambrózia", emoji: "🌿", uroven: "Veľmi nízka", skore: 1, sezona: false, pelZrn: "zatiaľ 0", trend: "— nezačala", komentar: "Ambrózia začína až v júli–auguste. Zatiaľ nie je v ovzduší.", outlook: [1,1,1] },
   byliny:   { label: "Byliny (štiav, skorocel)", short: "Byliny", emoji: "🌱", uroven: "Stredná",  skore: 3, sezona: true, pelZrn: "nízke až stredné", trend: "↗ rastie", komentar: "Pŕhľavovité, štiav a skorocel dosahujú stredné hodnoty — na celom území SR stúpajú.", outlook: [3,4,4] },
-  huby:     { label: "Spóry húb (Cladospórium)", short: "Spóry húb", emoji: "🍄", uroven: "Vysoká", skore: 4, sezona: true, pelZrn: "vysoké hodnoty", trend: "↗ rastie", komentar: "Spóry plesní Cladospórium a Alternária dosahujú vysoké hodnoty po nedávnom oteplení.", outlook: [4,4,3] },
+  huby:     { label: "Spóry húb (Cladospórium)", short: "Spóry húb", emoji: "🍄", uroven: "Veľmi vysoká", skore: 5, sezona: true, pelZrn: "vysoké hodnoty", trend: "↗ rastie", komentar: "Spóry plesní Cladospórium a Alternária dosahujú vysoké hodnoty po nedávnom oteplení.", outlook: [4,4,3] },
 };
 
 /* ── Peľový kalendár ── */
@@ -142,7 +142,17 @@ const MESIACE = ["Jan","Feb","Mar","Apr","Máj","Jún","Júl","Aug","Sep","Okt",
 const KATEGORIE = ["Stromy","Byliny a trávy","Spóry"];
 
 const CITIES = ["Bratislava","Košice","Prešov","Žilina","Banská Bystrica","Nitra","Trnava","Trenčín"];
-const CITY_MOD = { "Žilina":{"borovica":1.3,"travy":1.1}, "Nitra":{"borovica":1.1,"travy":1.2,"byliny":1.2}, "Banská Bystrica":{"borovica":1.2}, "Bratislava":{"travy":1.1,"huby":1.1}, "Trnava":{"travy":1.15} };
+// Reálne namerané dáta — pelovespravodajstvo.sk · 21. týždeň 2026
+const CITY_DATA = {
+  "Bratislava":      { borovica:4, travy:2, huby:5, breza:1, byliny:2, pelBor:"68 zŕn/m³",  pelTra:"16 zŕn/m³",  pelHub:"306 zŕn/m³" },
+  "Trnava":          { borovica:4, travy:2, huby:5, breza:1, byliny:2, pelBor:"68 zŕn/m³",  pelTra:"16 zŕn/m³",  pelHub:"306 zŕn/m³" },
+  "Trenčín":         { borovica:5, travy:2, huby:5, breza:1, byliny:2, pelBor:"157 zŕn/m³", pelTra:"16 zŕn/m³",  pelHub:"896 zŕn/m³" },
+  "Nitra":           { borovica:5, travy:2, huby:5, breza:1, byliny:2, pelBor:"308 zŕn/m³", pelTra:"30 zŕn/m³",  pelHub:"732 zŕn/m³" },
+  "Žilina":          { borovica:5, travy:2, huby:5, breza:2, byliny:1, pelBor:"972 zŕn/m³", pelTra:"21 zŕn/m³",  pelHub:"880 zŕn/m³" },
+  "Banská Bystrica": { borovica:5, travy:3, huby:4, breza:2, byliny:1, pelBor:"252 zŕn/m³", pelTra:"33 zŕn/m³",  pelHub:"91 zŕn/m³"  },
+  "Prešov":          { borovica:5, travy:3, huby:4, breza:2, byliny:1, pelBor:"252 zŕn/m³", pelTra:"33 zŕn/m³",  pelHub:"91 zŕn/m³"  },
+  "Košice":          { borovica:5, travy:3, huby:4, breza:2, byliny:1, pelBor:"252 zŕn/m³", pelTra:"33 zŕn/m³",  pelHub:"91 zŕn/m³"  },
+};
 const SENS_MULT = { "nízka":0.8, "stredná":1.0, "vysoká":1.25 };
 const S2L = ["","Veľmi nízka","Nízka","Stredná","Vysoká","Veľmi vysoká"];
 const DAYS = ["Zajtra","Pozajtra","Za 3 dni"];
@@ -150,13 +160,20 @@ const COL = { "Veľmi nízka":"#16a34a","Nízka":"#65a30d","Stredná":"#ca8a04",
 const BG  = { "Veľmi nízka":"#f0fdf4","Nízka":"#f7fee7","Stredná":"#fefce8","Vysoká":"#fff7ed","Veľmi vysoká":"#fef2f2" };
 
 function calcForecast(city, ids, sens) {
-  const cm = CITY_MOD[city] || {};
+  const cd = CITY_DATA[city] || {};
   const sm = SENS_MULT[sens] || 1;
   const allergens = ids.map(id => {
     const b = POLLEN_DATA[id]; if (!b) return null;
-    const cf = cm[id] || 1;
-    const s = Math.min(5, Math.round(b.skore * cf * sm));
-    return { ...b, id, s, uroven: S2L[s] || b.uroven, outlook: b.outlook.map(o => Math.min(5, Math.round(o * cf * sm))) };
+    // Use city-specific measured score if available, else base score
+    const baseScore = (cd[id] !== undefined) ? cd[id] : b.skore;
+    const s = Math.min(5, Math.round(baseScore * sm));
+    // City-specific pelZrn label
+    const pelZrnCity = id==="borovica" ? (cd.pelBor||b.pelZrn)
+                     : id==="travy"    ? (cd.pelTra||b.pelZrn)
+                     : id==="huby"     ? (cd.pelHub||b.pelZrn)
+                     : b.pelZrn;
+    return { ...b, id, s, uroven: S2L[s] || b.uroven, pelZrn: pelZrnCity,
+             outlook: b.outlook.map(o => Math.min(5, Math.round(o * sm))) };
   }).filter(Boolean).sort((a,b) => b.s - a.s);
   const max = allergens.reduce((m,a) => Math.max(m,a.s), 0);
   const avg = Math.round(allergens.reduce((t,a) => t+a.s, 0) / Math.max(allergens.length,1));
