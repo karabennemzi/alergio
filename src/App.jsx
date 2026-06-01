@@ -6,12 +6,12 @@ import { useState, useEffect } from "react";
    ══════════════════════════════════════════════════════════════ */
 const POLLEN_DATA = {
   borovica: { label: "Borovica / Ihličnany", short: "Borovica", emoji: "🌲", uroven: "Veľmi vysoká", skore: 5, sezona: true, pelZrn: "2 373 zŕn/m³ (Žilina) · 656 zŕn/m³ (Nitra)", trend: "↘ klesá", komentar: "Dominantný alergén týždňa — viditeľné žlté povlaky na autách a terasách. Ihličnany dokvitajú.", outlook: [4,3,2] },
-  travy:    { label: "Trávy (lipnicovité)",  short: "Trávy",    emoji: "🌾", uroven: "Stredná",     skore: 3, sezona: true, pelZrn: "rastúce koncentrácie", trend: "↗ rastie", komentar: "Sezóna práve začína — trávy sa stanú dominantným alergénom na najbližšie 2 mesiace.", outlook: [5,5,5] },
+  travy:    { label: "Trávy (lipnicovité)",  short: "Trávy",    emoji: "🌾", uroven: "Stredná",     skore: 3, sezona: true, pelZrn: "rastúce koncentrácie", trend: "↗ rastie", komentar: "Sezóna práve začína — trávy sa stanú dominantným alergénom na najbližšie 2 mesiace.", outlook: [4,4,5] },
   breza:    { label: "Breza",                short: "Breza",    emoji: "🌳", uroven: "Veľmi nízka", skore: 1, sezona: false, pelZrn: "nízke koncentrácie", trend: "↘ klesá", komentar: "Sezóna brezy sa končí, koncentrácie sú nízke.", outlook: [1,1,1] },
   lieska:   { label: "Lieska",               short: "Lieska",   emoji: "🌰", uroven: "Veľmi nízka", skore: 1, sezona: false, pelZrn: "stopové množstvá", trend: "— ukončená", komentar: "Sezóna liesky je dávno ukončená.", outlook: [1,1,1] },
   ambrozia: { label: "Ambrózia",             short: "Ambrózia", emoji: "🌿", uroven: "Veľmi nízka", skore: 1, sezona: false, pelZrn: "zatiaľ 0", trend: "— nezačala", komentar: "Ambrózia začína až v júli–auguste. Zatiaľ nie je v ovzduší.", outlook: [1,1,1] },
   byliny:   { label: "Byliny (štiav, skorocel)", short: "Byliny", emoji: "🌱", uroven: "Stredná",  skore: 3, sezona: true, pelZrn: "nízke až stredné", trend: "↗ rastie", komentar: "Pŕhľavovité, štiav a skorocel dosahujú stredné hodnoty — na celom území SR stúpajú.", outlook: [3,4,4] },
-  huby:     { label: "Spóry húb (Cladospórium)", short: "Spóry húb", emoji: "🍄", uroven: "Veľmi vysoká", skore: 5, sezona: true, pelZrn: "vysoké hodnoty", trend: "↗ rastie", komentar: "Spóry plesní Cladospórium a Alternária dosahujú vysoké hodnoty po nedávnom oteplení.", outlook: [4,4,3] },
+  huby:     { label: "Spóry húb (Cladospórium)", short: "Spóry húb", emoji: "🍄", uroven: "Veľmi vysoká", skore: 5, sezona: true, pelZrn: "vysoké hodnoty", trend: "↗ rastie", komentar: "Spóry plesní Cladospórium a Alternária dosahujú vysoké hodnoty po nedávnom oteplení.", outlook: [5,5,4] },
 };
 
 /* ── Peľový kalendár ── */
@@ -153,6 +153,22 @@ const CITY_DATA = {
   "Prešov":          { borovica:5, travy:3, huby:4, breza:2, byliny:1, pelBor:"252 zŕn/m³", pelTra:"33 zŕn/m³",  pelHub:"91 zŕn/m³"  },
   "Košice":          { borovica:5, travy:3, huby:4, breza:2, byliny:1, pelBor:"252 zŕn/m³", pelTra:"33 zŕn/m³",  pelHub:"91 zŕn/m³"  },
 };
+
+// Prognóza na 22. týždeň 2026 — pelovespravodajstvo.sk / RÚVZ BB
+const PROGNOZA = {
+  tyzden: "22. týždeň 2026",
+  datum: "od 2.6.2026",
+  items: [
+    { emoji:"🌲", label:"Borovica / Ihličnany", trend:"↘ klesá",  text:"Ihličnany postupne dokvitajú. Koncentrácie borovicových ihličnanov budú klesať.", color:"#2e7d32" },
+    { emoji:"🌾", label:"Trávy (lipnicovité)",  trend:"↗ stúpa",  text:"Trávy budú nadobúdať vysoké koncentrácie a stanú sa najsilnejším alergénom na najbližšie dva mesiace.", color:"#ea580c" },
+    { emoji:"🌱", label:"Byliny",               trend:"↗ stúpa",  text:"Na celom území stúpnu hladiny pŕhľavovitých, štiavu a skorocelu.", color:"#65a30d" },
+    { emoji:"🍄", label:"Spóry húb",            trend:"↗ stúpa",  text:"Koncentrácie spór húb (Cladospórium) budú stúpať počas teplejších dní.", color:"#7c3aed" },
+    { emoji:"🌳", label:"Stromy (dub, buk…)",   trend:"↘ klesá",  text:"Peľ ostatných drevín (dub, buk, orech) zostáva na nízkej úrovni.", color:"#6b7280" },
+  ],
+  poznamka: "Vplyvom počasia môžu byť regionálne rozdiely v kvantite peľu a spór v ovzduší.",
+  zdroj: "Mgr. Lucia Rendlová, RÚVZ Banská Bystrica",
+};
+
 const SENS_MULT = { "nízka":0.8, "stredná":1.0, "vysoká":1.25 };
 const S2L = ["","Veľmi nízka","Nízka","Stredná","Vysoká","Veľmi vysoká"];
 const DAYS = ["Zajtra","Pozajtra","Za 3 dni"];
@@ -172,8 +188,10 @@ function calcForecast(city, ids, sens) {
                      : id==="travy"    ? (cd.pelTra||b.pelZrn)
                      : id==="huby"     ? (cd.pelHub||b.pelZrn)
                      : b.pelZrn;
+    // Apply city factor to outlook too
+    const cityFactor = (b.skore > 0 && cd[id] !== undefined) ? (cd[id] / b.skore) : 1;
     return { ...b, id, s, uroven: S2L[s] || b.uroven, pelZrn: pelZrnCity,
-             outlook: b.outlook.map(o => Math.min(5, Math.round(o * sm))) };
+             outlook: b.outlook.map(o => Math.min(5, Math.round(o * cityFactor * sm))) };
   }).filter(Boolean).sort((a,b) => b.s - a.s);
   const max = allergens.reduce((m,a) => Math.max(m,a.s), 0);
   const avg = Math.round(allergens.reduce((t,a) => t+a.s, 0) / Math.max(allergens.length,1));
@@ -474,6 +492,32 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast }) {
                   );
                 })}
               </div>
+            </div>
+          </div>
+
+          {/* ── Prognóza na ďalší týždeň ── */}
+          <div className="card" style={{ padding:22, marginBottom:16 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:14 }}>
+              <div className="lbl" style={{ marginBottom:0 }}>Prognóza · {PROGNOZA.tyzden}</div>
+              <div style={{ fontSize:11, color:"#9CA3AF" }}>{PROGNOZA.datum}</div>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(180px,1fr))", gap:10, marginBottom:14 }}>
+              {PROGNOZA.items.map((p,i) => (
+                <div key={i} style={{ display:"flex", gap:10, padding:"10px 12px", background:`${p.color}08`, borderRadius:10, border:`1px solid ${p.color}20`, alignItems:"flex-start" }}>
+                  <span style={{ fontSize:18, flexShrink:0 }}>{p.emoji}</span>
+                  <div>
+                    <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
+                      <span style={{ fontSize:12, fontWeight:600, color:"#111827" }}>{p.label}</span>
+                      <span style={{ fontSize:11, fontWeight:700, color:p.color, background:`${p.color}18`, padding:"1px 6px", borderRadius:20 }}>{p.trend}</span>
+                    </div>
+                    <div style={{ fontSize:12, color:"#6B7280", lineHeight:1.5 }}>{p.text}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", paddingTop:10, borderTop:"1px solid #F3F4F6" }}>
+              <div style={{ fontSize:11.5, color:"#9CA3AF", fontStyle:"italic" }}>⚠️ {PROGNOZA.poznamka}</div>
+              <div style={{ fontSize:11, color:"#D1D5DB", flexShrink:0, marginLeft:12 }}>{PROGNOZA.zdroj}</div>
             </div>
           </div>
 
