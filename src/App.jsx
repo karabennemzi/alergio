@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 
 /* ══════════════════════════════════════════════════════════════
-   DÁTA — ÚVZ SR / pelovespravodajstvo.sk
+   DÁTA — ÚVZ SR
    21. týždeň 2026 · aktualizované 27.5.2026
    ══════════════════════════════════════════════════════════════ */
 const POLLEN_DATA = {
@@ -166,7 +166,7 @@ const PROGNOZA = {
     { emoji:"🌳", label:"Stromy (dub, buk…)",   trend:"↘ klesá",  text:"Peľ ostatných drevín (dub, buk, orech) zostáva na nízkej úrovni.", color:"#6b7280" },
   ],
   poznamka: "Vplyvom počasia môžu byť regionálne rozdiely v kvantite peľu a spór v ovzduší.",
-  zdroj: "Mgr. Lucia Rendlová, RÚVZ Banská Bystrica",
+  zdroj: "ÚVZ SR",
 };
 
 const SENS_MULT = { "nízka":0.8, "stredná":1.0, "vysoká":1.25 };
@@ -566,7 +566,7 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast }) {
           </div>
 
           <div style={{ marginTop:16, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <div style={{ fontSize:11, color:"#D1D5DB" }}>Zdroj: pelovespravodajstvo.sk · ÚVZ SR · Stanice: RÚVZ BB, NR, KE, TT, ZA · ÚVZ SR BA</div>
+            <div style={{ fontSize:11, color:"#D1D5DB" }}>Zdroj: ÚVZ SR</div>
             <button onClick={()=>setForecast(null)} style={{ fontSize:12, color:"#9CA3AF", background:"none", border:"none", cursor:"pointer", textDecoration:"underline" }}>Resetovať</button>
           </div>
         </div>
@@ -655,7 +655,7 @@ function Sidebar({ page, setPage, city, setCity, chosen, toggle, sens, setSens, 
       {/* Footer */}
       <div style={{ padding:"14px 20px", borderTop:"1px solid #EAECF0" }}>
         <div style={{ fontSize:11, color:"#D1D5DB", lineHeight:1.6 }}>
-          Dáta: ÚVZ SR · pelovespravodajstvo.sk<br/>
+          Dáta: ÚVZ SR<br/>
           21. týždeň 2026 · 27.5.2026
         </div>
       </div>
