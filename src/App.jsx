@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 /* ══════════════════════════════════════════════════════════════
    DÁTA — ÚVZ SR / pelovespravodajstvo.sk
@@ -648,6 +648,11 @@ export default function App() {
 
   const toggle = id => setChosen(p => p.includes(id) ? p.filter(x=>x!==id) : [...p,id]);
   const go = () => { if (chosen.length) setForecast(calcForecast(city, chosen, sens)); };
+
+  // Auto-refresh when city/allergens/sensitivity change — but only if forecast is already shown
+  useEffect(() => {
+    if (forecast && chosen.length) setForecast(calcForecast(city, chosen, sens));
+  }, [city, chosen, sens]);
 
   // On mobile: show results screen OR setup screen (not both)
   // isMobileResult = mobile + forecast exists + on forecast page
