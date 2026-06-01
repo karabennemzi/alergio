@@ -243,116 +243,100 @@ function AlmanachPage() {
             </div>
 
             {/* Rows */}
-            {CALENDAR.filter(p=>p.kategoria===kat).map(p => (
-              <div key={p.id}
-                onClick={() => setSelected(selected?.id===p.id ? null : p)}
-                style={{ display:"grid", gridTemplateColumns:"220px repeat(12,1fr)", borderBottom:"1px solid #F3F4F6", cursor:"pointer", transition:"background .15s",
-                  background: selected?.id===p.id ? `${p.farba}08` : "transparent" }}
-                onMouseEnter={e=>{ if(selected?.id!==p.id) e.currentTarget.style.background="#F9FAFB"; }}
-                onMouseLeave={e=>{ if(selected?.id!==p.id) e.currentTarget.style.background="transparent"; }}>
+            {CALENDAR.filter(p=>p.kategoria===kat).map(p => {
+              const isOpen = selected?.id===p.id;
+              return (
+                <div key={p.id}>
+                  {/* Main row */}
+                  <div
+                    onClick={() => setSelected(isOpen ? null : p)}
+                    style={{ display:"grid", gridTemplateColumns:"220px repeat(12,1fr)", borderBottom: isOpen ? "none" : "1px solid #F3F4F6", cursor:"pointer", transition:"background .15s",
+                      background: isOpen ? `${p.farba}10` : "transparent" }}
+                    onMouseEnter={e=>{ if(!isOpen) e.currentTarget.style.background="#F9FAFB"; }}
+                    onMouseLeave={e=>{ if(!isOpen) e.currentTarget.style.background="transparent"; }}>
 
-                {/* Name */}
-                <div style={{ padding:"12px 16px", display:"flex", alignItems:"center", gap:10 }}>
-                  <span style={{ fontSize:18 }}>{p.emoji}</span>
-                  <div>
-                    <div style={{ fontSize:13, fontWeight:600, color:"#111827" }}>{p.label}</div>
-                    <div style={{ fontSize:11, color:"#9CA3AF", marginTop:1 }}>
-                      {["●","●","●","●","●"].map((d,i) => (
-                        <span key={i} style={{ color: i<p.intenzita ? p.farba : "#E5E7EB", marginRight:2, fontSize:8 }}>●</span>
-                      ))}
-                      <span style={{ marginLeft:4 }}>
-                        {p.intenzita<=2?"Nízka":p.intenzita===3?"Stredná":p.intenzita===4?"Vysoká":"Veľmi vysoká"}
-                      </span>
+                    {/* Name */}
+                    <div style={{ padding:"12px 16px", display:"flex", alignItems:"center", gap:10 }}>
+                      <span style={{ fontSize:18 }}>{p.emoji}</span>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:13, fontWeight:600, color:"#111827" }}>{p.label}</div>
+                        <div style={{ fontSize:11, color:"#9CA3AF", marginTop:1 }}>
+                          {[0,1,2,3,4].map(i => (
+                            <span key={i} style={{ color: i<p.intenzita ? p.farba : "#E5E7EB", marginRight:2, fontSize:8 }}>●</span>
+                          ))}
+                          <span style={{ marginLeft:4 }}>
+                            {p.intenzita<=2?"Nízka":p.intenzita===3?"Stredná":p.intenzita===4?"Vysoká":"Veľmi vysoká"}
+                          </span>
+                        </div>
+                      </div>
+                      <span style={{ fontSize:12, color: isOpen ? p.farba : "#D1D5DB", marginRight:8, transition:"transform .2s", display:"inline-block", transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>▼</span>
                     </div>
-                  </div>
-                </div>
 
-                {/* Month bars */}
-                {p.mesiace.map((active,i) => (
-                  <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"center", padding:"12px 3px", background: i===currentMonth ? "#F0FDF4" : "transparent" }}>
-                    {active ? (
-                      <div style={{
-                        width:"100%", height:10, borderRadius:5,
-                        background: p.farba,
-                        opacity: p.intenzita/5,
-                        minWidth:8,
-                      }}/>
-                    ) : (
-                      <div style={{ width:"100%", height:2, background:"#F3F4F6", borderRadius:1 }}/>
-                    )}
+                    {/* Month bars */}
+                    {p.mesiace.map((active,i) => (
+                      <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"center", padding:"12px 3px", background: i===currentMonth ? "#F0FDF4" : "transparent" }}>
+                        {active ? (
+                          <div style={{ width:"100%", height:10, borderRadius:5, background:p.farba, opacity:p.intenzita/5, minWidth:8 }}/>
+                        ) : (
+                          <div style={{ width:"100%", height:2, background:"#F3F4F6", borderRadius:1 }}/>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            ))}
+
+                  {/* Inline detail — expands below the row */}
+                  {isOpen && (
+                    <div style={{
+                      borderBottom:"1px solid #F3F4F6",
+                      background:`${p.farba}06`,
+                      borderLeft:`3px solid ${p.farba}`,
+                      padding:"20px 24px",
+                      animation:"fadeUp .2s ease both",
+                    }}>
+                      <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr", gap:24 }}>
+                        {/* Popis */}
+                        <div>
+                          <div style={{ fontSize:12, fontWeight:600, color:p.farba, textTransform:"uppercase", letterSpacing:.8, marginBottom:6 }}>O alergéne</div>
+                          <p style={{ fontSize:13, color:"#374151", lineHeight:1.7, marginBottom:10 }}>{p.popis}</p>
+                          <div style={{ display:"flex", gap:16 }}>
+                            <div>
+                              <div style={{ fontSize:10, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:.5, marginBottom:2 }}>Sezóna vrcholí</div>
+                              <div style={{ fontSize:13, fontWeight:600, color:"#111827" }}>{p.peak}</div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize:10, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:.5, marginBottom:2 }}>Výskyt</div>
+                              <div style={{ fontSize:13, color:"#374151" }}>{p.oblast}</div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize:10, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:.5, marginBottom:2 }}>Alergennosť</div>
+                              <div style={{ fontSize:13, fontWeight:600, color:p.farba }}>{p.alergennost}</div>
+                            </div>
+                          </div>
+                        </div>
+                        {/* Príznaky */}
+                        <div>
+                          <div style={{ fontSize:12, fontWeight:600, color:p.farba, textTransform:"uppercase", letterSpacing:.8, marginBottom:8 }}>Príznaky</div>
+                          {p.znaky.map((z,i) => (
+                            <div key={i} style={{ display:"flex", alignItems:"center", gap:7, marginBottom:6 }}>
+                              <div style={{ width:5, height:5, borderRadius:"50%", background:p.farba, flexShrink:0 }}/>
+                              <span style={{ fontSize:12.5, color:"#374151" }}>{z}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Krížové reakcie */}
+                        <div>
+                          <div style={{ fontSize:12, fontWeight:600, color:p.farba, textTransform:"uppercase", letterSpacing:.8, marginBottom:8 }}>Krížové reakcie</div>
+                          <div style={{ fontSize:12.5, color: p.krizeReakcie==="Zriedkavé" ? "#9CA3AF" : "#374151", lineHeight:1.6 }}>{p.krizeReakcie}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         ))}
       </div>
-
-      {/* Detail panel */}
-      {selected && (
-        <div style={{
-          background:"#fff", border:`1px solid ${selected.farba}30`, borderRadius:14,
-          padding:28, marginBottom:28,
-          borderLeft:`4px solid ${selected.farba}`,
-          animation:"fadeUp .25s ease both",
-        }}>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:24 }}>
-            {/* Main info */}
-            <div style={{ gridColumn:"1/3" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:16 }}>
-                <span style={{ fontSize:32 }}>{selected.emoji}</span>
-                <div>
-                  <h2 style={{ fontSize:18, fontWeight:700, color:"#111827" }}>{selected.label}</h2>
-                  <span style={{ fontSize:12, fontWeight:600, color:selected.farba, background:`${selected.farba}15`, padding:"2px 8px", borderRadius:20 }}>
-                    {selected.kategoria}
-                  </span>
-                </div>
-              </div>
-              <p style={{ fontSize:13.5, color:"#374151", lineHeight:1.7 }}>{selected.popis}</p>
-            </div>
-
-            {/* Stats */}
-            <div>
-              <div style={{ marginBottom:16 }}>
-                <div style={{ fontSize:11, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:.8, marginBottom:4 }}>Sezóna vrcholí</div>
-                <div style={{ fontSize:15, fontWeight:600, color:"#111827" }}>{selected.peak}</div>
-              </div>
-              <div style={{ marginBottom:16 }}>
-                <div style={{ fontSize:11, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:.8, marginBottom:4 }}>Alergennosť</div>
-                <div style={{ fontSize:15, fontWeight:600, color:selected.farba }}>{selected.alergennost}</div>
-              </div>
-              <div>
-                <div style={{ fontSize:11, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:.8, marginBottom:4 }}>Výskyt</div>
-                <div style={{ fontSize:13, color:"#374151" }}>{selected.oblast}</div>
-              </div>
-            </div>
-
-            <div>
-              <div style={{ marginBottom:16 }}>
-                <div style={{ fontSize:11, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:.8, marginBottom:8 }}>Typické príznaky</div>
-                {selected.znaky.map((z,i) => (
-                  <div key={i} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:5 }}>
-                    <div style={{ width:5, height:5, borderRadius:"50%", background:selected.farba, flexShrink:0 }}/>
-                    <span style={{ fontSize:12.5, color:"#374151" }}>{z}</span>
-                  </div>
-                ))}
-              </div>
-              {selected.krizeReakcie !== "Zriedkavé" && (
-                <div>
-                  <div style={{ fontSize:11, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:.8, marginBottom:4 }}>Krížové reakcie</div>
-                  <div style={{ fontSize:12, color:"#6B7280", lineHeight:1.5 }}>{selected.krizeReakcie}</div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {!selected && (
-        <div style={{ textAlign:"center", padding:"12px 0", fontSize:13, color:"#9CA3AF" }}>
-          Klikni na riadok v tabuľke pre zobrazenie detailu alergénu
-        </div>
-      )}
 
       {/* Legend */}
       <div style={{ display:"flex", alignItems:"center", gap:24, padding:"16px 20px", background:"#F9FAFB", borderRadius:10, fontSize:12, color:"#6B7280" }}>
@@ -369,7 +353,7 @@ function AlmanachPage() {
           <div style={{ width:12, height:12, background:"#F0FDF4", border:"1px solid #86efac", borderRadius:3 }}/>
           <span>Aktuálny mesiac</span>
         </div>
-        <span style={{ marginLeft:"auto", color:"#9CA3AF" }}>Klikni na riadok pre detail · Zdroj: ÚVZ SR</span>
+        <span style={{ marginLeft:"auto", color:"#9CA3AF" }}>Klikni na riadok ▼ pre rozbalenie detailu · Zdroj: ÚVZ SR</span>
       </div>
     </div>
   );
@@ -599,7 +583,7 @@ function Sidebar({ page, setPage, city, setCity, chosen, toggle, sens, setSens, 
           <div style={{ height:1, background:"#F3F4F6", marginBottom:16 }}/>
           <div style={{ fontSize:12.5, color:"#6B7280", lineHeight:1.7 }}>
             Prehľad sezón kvitnutia všetkých alergénov na Slovensku.<br/><br/>
-            Klikni na riadok v tabuľke pre zobrazenie detailu.
+            Klikni na riadok pre rozbalenie detailu.
           </div>
         </div>
       )}
