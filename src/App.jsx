@@ -495,32 +495,6 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast }) {
             </div>
           </div>
 
-          {/* ── Prognóza na ďalší týždeň ── */}
-          <div className="card" style={{ padding:22, marginBottom:16 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:14 }}>
-              <div className="lbl" style={{ marginBottom:0 }}>Prognóza · {PROGNOZA.tyzden}</div>
-              <div style={{ fontSize:11, color:"#9CA3AF" }}>{PROGNOZA.datum}</div>
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(180px,1fr))", gap:10, marginBottom:14 }}>
-              {PROGNOZA.items.map((p,i) => (
-                <div key={i} style={{ display:"flex", gap:10, padding:"10px 12px", background:`${p.color}08`, borderRadius:10, border:`1px solid ${p.color}20`, alignItems:"flex-start" }}>
-                  <span style={{ fontSize:18, flexShrink:0 }}>{p.emoji}</span>
-                  <div>
-                    <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
-                      <span style={{ fontSize:12, fontWeight:600, color:"#111827" }}>{p.label}</span>
-                      <span style={{ fontSize:11, fontWeight:700, color:p.color, background:`${p.color}18`, padding:"1px 6px", borderRadius:20 }}>{p.trend}</span>
-                    </div>
-                    <div style={{ fontSize:12, color:"#6B7280", lineHeight:1.5 }}>{p.text}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", paddingTop:10, borderTop:"1px solid #F3F4F6" }}>
-              <div style={{ fontSize:11.5, color:"#9CA3AF", fontStyle:"italic" }}>⚠️ {PROGNOZA.poznamka}</div>
-              <div style={{ fontSize:11, color:"#D1D5DB", flexShrink:0, marginLeft:12 }}>{PROGNOZA.zdroj}</div>
-            </div>
-          </div>
-
           <div className="main-grid" style={{ display:"grid", gridTemplateColumns:"1.2fr 1fr", gap:16, marginBottom:16 }}>
             <div className="card" style={{ padding:24 }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
@@ -566,21 +540,28 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast }) {
             </div>
           </div>
 
-          <div className="card" style={{ padding:24 }}>
-            <div className="lbl" style={{ marginBottom:16 }}>Prehľad sezóny — všetky alergény</div>
-            <div className="season-grid" style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:8 }}>
-              {Object.entries(POLLEN_DATA).map(([id,d]) => {
-                const col = COL[d.uroven]||"#888";
-                const bg  = BG[d.uroven]||"#f9fafb";
-                return (
-                  <div key={id} style={{ background:bg, border:`1px solid ${col}22`, borderRadius:10, padding:"12px 8px", textAlign:"center" }}>
-                    <div style={{ fontSize:20, marginBottom:6 }}>{d.emoji}</div>
-                    <div style={{ fontSize:11, fontWeight:600, color:"#374151", marginBottom:4, lineHeight:1.3 }}>{d.short}</div>
-                    <div style={{ fontSize:11, fontWeight:700, color:col }}>{d.uroven}</div>
-                    <div style={{ fontSize:10, color:"#9CA3AF", marginTop:2 }}>{d.trend}</div>
+          <div className="card" style={{ padding:22 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:14 }}>
+              <div className="lbl" style={{ marginBottom:0 }}>Prognóza · {PROGNOZA.tyzden}</div>
+              <div style={{ fontSize:11, color:"#9CA3AF" }}>{PROGNOZA.datum}</div>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(180px,1fr))", gap:10, marginBottom:14 }}>
+              {PROGNOZA.items.map((p,i) => (
+                <div key={i} style={{ display:"flex", gap:10, padding:"10px 12px", background:`${p.color}08`, borderRadius:10, border:`1px solid ${p.color}20`, alignItems:"flex-start" }}>
+                  <span style={{ fontSize:18, flexShrink:0 }}>{p.emoji}</span>
+                  <div>
+                    <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
+                      <span style={{ fontSize:12, fontWeight:600, color:"#111827" }}>{p.label}</span>
+                      <span style={{ fontSize:11, fontWeight:700, color:p.color, background:`${p.color}18`, padding:"1px 6px", borderRadius:20 }}>{p.trend}</span>
+                    </div>
+                    <div style={{ fontSize:12, color:"#6B7280", lineHeight:1.5 }}>{p.text}</div>
                   </div>
-                );
-              })}
+                </div>
+              ))}
+            </div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", paddingTop:10, borderTop:"1px solid #F3F4F6" }}>
+              <div style={{ fontSize:11.5, color:"#9CA3AF", fontStyle:"italic" }}>⚠️ {PROGNOZA.poznamka}</div>
+              <div style={{ fontSize:11, color:"#D1D5DB", flexShrink:0, marginLeft:12 }}>{PROGNOZA.zdroj}</div>
             </div>
           </div>
 
