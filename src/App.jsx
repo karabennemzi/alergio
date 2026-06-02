@@ -229,7 +229,11 @@ const PROGNOZA = {
   zdroj: "ÚVZ SR",
 };
 
-const SENS_MULT = { "nízka":0.8, "stredná":1.0, "vysoká":1.25 };
+// Citlivosť ovplyvňuje prah príznakov, nie koncentráciu peľu
+// Pri vysokej citlivosti zobrazíme varovanie aj pri nižšej hladine
+const SENS_MULT = { "nízka":1.0, "stredná":1.0, "vysoká":1.0 };
+const SENS_THRESHOLD = { "nízka": 4, "stredná": 3, "vysoká": 2 };
+// SENS_THRESHOLD = od akého skóre dostane upozornenie "rizikové pre teba"
 const S2L = ["","Veľmi nízka","Nízka","Stredná","Vysoká","Veľmi vysoká"];
 const DAYS = ["Zajtra","Pozajtra","Za 3 dni"];
 
@@ -291,15 +295,23 @@ const CITY_ALTITUDE_DELAY = {
   "Košice":     0.5, // 208m n.m.
 };
 
-// Fenologický koeficient s korekciou na nadmorskú výšku
+// Fenologický koeficient — DENNÁ interpolácia medzi týždennými hodnotami
+// FENO[n] = koeficient pre n-tý týždeň od teraz
+// Day 0 = dnes, Day 7 = o týždeň → interpolujeme plynulo
 function fenoCoeff(id, dayIndex, city) {
-  const delay = CITY_ALTITUDE_DELAY[city] || 0;
-  const fArr  = FENO[id];
+  const delay  = CITY_ALTITUDE_DELAY[city] || 0;
+  const fArr   = FENO[id];
   if (!fArr) return 1.0;
-  // Posun indexu o delay — hornaté mestá sú o delay týždňov "pozadu"
-  const adjustedIdx = Math.max(0, dayIndex - Math.round(delay));
-  const i = Math.min(adjustedIdx, fArr.length - 1);
-  return fArr[i] ?? 1.0;
+
+  // Prepočet dní na týždenný float (s korekciou nadmorskej výšky)
+  const weekFloat = Math.max(0, (dayIndex - delay * 7) / 7);
+  const w0  = Math.floor(weekFloat);
+  const w1  = Math.min(w0 + 1, fArr.length - 1);
+  const w0c = Math.min(w0, fArr.length - 1);
+  const frac = weekFloat - w0;
+
+  // Lineárna interpolácia medzi dvoma týždňami
+  return fArr[w0c] + frac * (fArr[w1] - fArr[w0c]);
 }
 
 // Počet po sebe idúcich suchých dní pred daným dňom (akumulačný efekt)
@@ -388,7 +400,7 @@ async function fetchWeather(city) {
   const [lat, lon] = CITY_COORDS[city] || [48.15, 17.11];
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
     + `&daily=temperature_2m_max,precipitation_sum,windspeed_10m_max,cloudcover_mean,weathercode`
-    + `&hourly=temperature_2m,precipitation,windspeed_10m,cloudcover`
+    + `&hourly=temperature_2m,precipitation,windspeed_10m,cloudcover,relative_humidity_2m`
     + `&forecast_days=7&timezone=Europe%2FBratislava`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Open-Meteo chyba");
@@ -422,19 +434,33 @@ async function fetchWeather(city) {
   }));
 }
 
-// Základný hodinový profil peľového rizika (bez vplyvu počasia)
-// Modeluje prirodzené uvoľňovanie peľu počas dňa
-const BASE_HOURLY_POLLEN = [
-  0.05, 0.05, 0.05, 0.05, 0.08, 0.20, // 00-05: noc → svitanie
-  0.55, 0.85, 1.00, 0.95, 0.85, 0.75, // 06-11: ranný vrchol (rosa vysychá, kvety sa otvárajú)
-  0.70, 0.68, 0.62, 0.60, 0.55, 0.50, // 12-17: poobede — peľ sa rozptyľuje
-  0.38, 0.28, 0.20, 0.15, 0.10, 0.07, // 18-23: večer → peľ sedimentuje
-];
+// Per-alergén hodinové profily — každý alergén má iný čas uvoľňovania
+// Vychádza z vedeckých štúdií (Galán et al. 2017, AAAAI guidelines)
+const HOURLY_PROFILES = {
+  // Trávy: klasický ranný vrchol, rosa vysychá okolo 7-9h
+  travy:    [.04,.04,.04,.05,.10,.25, .60,.90,1.0,.92,.82,.72, .65,.60,.55,.50,.45,.40, .30,.22,.15,.10,.06,.04],
+  // Breza: neskorší ranný vrchol, závisí od teploty
+  breza:    [.03,.03,.03,.04,.07,.15, .40,.72,.92,1.0,.95,.85, .75,.68,.60,.55,.48,.42, .32,.22,.14,.09,.05,.03],
+  // Borovica: poobedný vrchol (ťažší peľ, potrebuje vyššiu teplotu)
+  borovica: [.03,.03,.03,.04,.06,.12, .30,.55,.78,.92,1.0,.98, .92,.85,.78,.70,.60,.50, .38,.28,.18,.12,.07,.04],
+  // Lieska: podobná breze
+  lieska:   [.03,.03,.03,.04,.08,.18, .45,.75,.95,1.0,.92,.82, .72,.65,.58,.52,.45,.38, .28,.20,.13,.08,.05,.03],
+  // Ambrózia: veľmi skoro ráno! (5-8h je vrchol)
+  ambrozia: [.05,.05,.05,.06,.15,.40, .85,1.0,.95,.85,.75,.65, .58,.52,.47,.42,.38,.33, .25,.18,.12,.08,.05,.05],
+  // Byliny: podobné trávam, mierne neskorší vrchol
+  byliny:   [.04,.04,.04,.05,.09,.22, .55,.82,.95,1.0,.92,.82, .72,.65,.60,.55,.50,.44, .34,.24,.16,.10,.06,.04],
+  // Spóry húb: poobedný-večerný vrchol! (teplo + vlhkosť popoludní)
+  huby:     [.05,.05,.05,.06,.08,.12, .22,.35,.50,.68,.82,.92, .98,1.0,.96,.90,.82,.72, .58,.44,.32,.22,.14,.07],
+};
+// Fallback pre neznáme alergény
+const BASE_HOURLY_POLLEN = HOURLY_PROFILES.travy;
 
-function calcBestWorstTime(dayData) {
+// Mestá v kotlinách — ranná teplotná inverzia zachytáva peľ
+const VALLEY_CITIES = new Set(["Bratislava","Nitra","Trenčín"]);
+
+function calcBestWorstTime(dayData, city = "", chosenIds = []) {
   const hourly = dayData?.hourly;
   if (!hourly || hourly.length < 24) {
-    // Fallback — žiadne hodinové dáta
     return {
       best:        "18:00–22:00",
       worst:       "06:00–10:00",
@@ -444,33 +470,64 @@ function calcBestWorstTime(dayData) {
     };
   }
 
+  const isValley = VALLEY_CITIES.has(city);
+
+  // FIX 4: Identifikuj kedy dážď PRESTANE — burst nastane 1-2h potom
+  const rainStopsAt = (() => {
+    for (let h = 1; h < 24; h++) {
+      if ((hourly[h-1]?.rain ?? 0) > 0.5 && (hourly[h]?.rain ?? 0) < 0.2) return h;
+    }
+    return -1;
+  })();
+
+  // Vytvor kompozitný hodinový profil zo všetkých vybraných alergénov
+  // FIX 3: Každý alergén má vlastný profil
+  const compositeProfile = Array.from({length:24}, (_, hr) => {
+    if (!chosenIds || chosenIds.length === 0) return BASE_HOURLY_POLLEN[hr];
+    const vals = chosenIds.map(id => (HOURLY_PROFILES[id] ?? HOURLY_PROFILES.travy)[hr]);
+    return vals.reduce((a,b)=>a+b,0) / vals.length;
+  });
+
   // Vypočítaj hodinové riziko
   const scores = hourly.map(h => {
-    const base = BASE_HOURLY_POLLEN[h.hour] ?? 0.5;
+    const base = compositeProfile[h.hour] ?? 0.5;
 
-    // Dážď — silný dážď = bezpečno, slabý = čiastočné zníženie
+    // Dážď
     let rainMod = 1.0;
-    if (h.rain > 2.0)  rainMod = 0.05;
-    else if (h.rain > 0.8) rainMod = 0.25;
-    else if (h.rain > 0.2) rainMod = 0.55;
+    if (h.rain > 2.0)       rainMod = 0.04;
+    else if (h.rain > 0.8)  rainMod = 0.20;
+    else if (h.rain > 0.2)  rainMod = 0.50;
 
-    // Teplota — pod 8°C kvety zatvorené, nad 26°C peľ stúpa
-    const tempMod = h.temp < 6  ? 0.20 :
-                    h.temp < 10 ? 0.50 :
-                    h.temp < 16 ? 0.80 :
+    // FIX 4: Burst 1-2h po zastavení dažďa
+    if (rainStopsAt > 0 && (h.hour === rainStopsAt + 1 || h.hour === rainStopsAt + 2)) {
+      rainMod = Math.min(rainMod * 1.50, 1.40);
+    }
+
+    // Teplota
+    const tempMod = h.temp < 6  ? 0.15 :
+                    h.temp < 10 ? 0.45 :
+                    h.temp < 16 ? 0.78 :
                     h.temp < 22 ? 1.00 :
-                    h.temp < 27 ? 1.15 : 1.25;
+                    h.temp < 27 ? 1.18 : 1.28;
 
-    // Vietor — 10-30 km/h šíri peľ, nad 45 narúša kvety
+    // Vietor
     const windMod = h.wind < 5  ? 0.85 :
                     h.wind < 15 ? 1.00 :
-                    h.wind < 30 ? 1.20 :
-                    h.wind < 45 ? 1.30 : 1.05;
+                    h.wind < 30 ? 1.22 :
+                    h.wind < 45 ? 1.32 : 1.05;
 
-    // Oblačnosť — zatažené ráno = menej ranného peľu
-    const cloudMod = 1.0 - (h.clouds / 100) * 0.20;
+    // Oblačnosť
+    const cloudMod = 1.0 - (h.clouds / 100) * 0.22;
 
-    return base * rainMod * tempMod * windMod * cloudMod;
+    // FIX 5: Vlhkosť (ak dostupná)
+    const humMod = h.humidity !== undefined
+      ? (h.humidity > 90 ? 0.15 : h.humidity > 80 ? 0.50 : h.humidity > 70 ? 0.80 : 1.00)
+      : 1.0;
+
+    // FIX 6: Kotlinová inverzia — ráno (5-10h) +25% pre BA, NR, TN
+    const inversionMod = (isValley && h.hour >= 5 && h.hour <= 10) ? 1.25 : 1.0;
+
+    return base * rainMod * tempMod * windMod * cloudMod * humMod * inversionMod;
   });
 
   // Nájdi najlepší a najhorší 2-hodinový blok (mimo noci 23:00-05:00)
@@ -559,14 +616,16 @@ function calcHybrid(city, ids, sens, weatherDays) {
         const prevRain  = i > 0 ? weatherDays[i - 1].rain : 0;
         const dryStreak = dryStreakBefore(weatherDays, i);
 
-        // P1: Fenológia s korekciou nadmorskej výšky
+        // P1: Fenológia s korekciou nadmorskej výšky (denná interpolácia)
         const feno = fenoCoeff(id, i, city);
 
         // P2+P3: Počasie s peľ-špecifickým rain faktorom + akumulácia
         const wf = calcWeatherFactor(day, prevRain, id, dryStreak);
 
-        // Výsledok
-        const raw   = baseScore * feno * wf * sm;
+        // P4b: Kotlinová inverzia — denný boost pre mestá v kotlinách
+        const inversionDayBoost = VALLEY_CITIES.has(city) ? 1.12 : 1.0;
+
+        const raw   = baseScore * feno * wf * inversionDayBoost;
         const score = Math.min(5, Math.max(0, Math.round(raw)));
         const driver = weatherDriver(day, prevRain);
 
@@ -591,10 +650,12 @@ function calcForecast(city, ids, sens) {
                      : id==="travy"    ? (cd.pelTra||b.pelZrn)
                      : id==="huby"     ? (cd.pelHub||b.pelZrn)
                      : b.pelZrn;
-    // Apply city factor to outlook too
+    // Apply city factor to outlook (sensitivity no longer inflates score)
     const cityFactor = (b.skore > 0 && cd[id] !== undefined) ? (cd[id] / b.skore) : 1;
+    const threshold = SENS_THRESHOLD[sens] || 3;
     return { ...b, id, s, uroven: S2L[s] || b.uroven, pelZrn: pelZrnCity,
-             outlook: b.outlook.map(o => Math.min(5, Math.round(o * cityFactor * sm))) };
+             isRiskyForUser: s >= threshold,
+             outlook: b.outlook.map(o => Math.min(5, Math.round(o * cityFactor))) };
   }).filter(Boolean).sort((a,b) => b.s - a.s);
   const max = allergens.reduce((m,a) => Math.max(m,a.s), 0);
   const avg = Math.round(allergens.reduce((t,a) => t+a.s, 0) / Math.max(allergens.length,1));
@@ -867,7 +928,7 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
                 )}
               </div>
               {(() => {
-                const bw = calcBestWorstTime(weather?.[0]);
+                const bw = calcBestWorstTime(weather?.[0], city, chosen);
                 return (
                   <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
                     <div style={{ display:"flex", alignItems:"flex-start", gap:12 }}>
@@ -993,6 +1054,7 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
                       <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
                         <span style={{ fontSize:14, fontWeight:600, color:T.text }}>{a.label}</span>
                         {a.sezona && <span style={{ fontSize:10, fontWeight:600, color:col, background:`${col}18`, padding:"1px 6px", borderRadius:20 }}>SEZÓNA</span>}
+                        {a.isRiskyForUser && <span style={{ fontSize:10, fontWeight:600, color:"#dc2626", background:"#fef2f2", padding:"1px 6px", borderRadius:20 }}>⚠ rizik. pre teba</span>}
                       </div>
                       <div style={{ fontSize:12, color:T.textMuted, marginBottom:6 }}>{a.komentar}</div>
                       <Dots score={a.s} color={col}/>
