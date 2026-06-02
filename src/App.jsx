@@ -237,6 +237,14 @@ const SENS_THRESHOLD = { "nízka": 4, "stredná": 3, "vysoká": 2 };
 const S2L = ["","Veľmi nízka","Nízka","Stredná","Vysoká","Veľmi vysoká"];
 const DAYS = ["Zajtra","Pozajtra","Za 3 dni"];
 
+// Vysvetlivky koncentrácií peľu — ÚVZ SR definícia
+const CONC_INFO = [
+  { range:"0 – 30",   label:"Nízke",        desc:"Väčšina alergikov bez príznakov",            color:"#16a34a", bg:"#f0fdf4" },
+  { range:"30 – 150", label:"Stredné–Vysoké",desc:"Príznaky u citlivých jedincov",              color:"#f59e0b", bg:"#fefce8" },
+  { range:"nad 150",  label:"Veľmi vysoké",  desc:"Silné príznaky u väčšiny alergikov",         color:"#dc2626", bg:"#fef2f2" },
+];
+const CONC_NOTE = "Biologické častice = peľové zrná a spóry húb (plesní). Hodnoty v počte zŕn/m³ vzduchu. Zdroj: ÚVZ SR.";
+
 const CITY_COORDS = {
   "Bratislava":      [48.1486, 17.1077],
   "Košice":          [48.7164, 21.2611],
@@ -968,7 +976,7 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
                     </div>
                     <div style={{ marginLeft:"auto", textAlign:"right" }}>
                       {(() => { const drv = weatherDriver(weather[0], 0); return (
-                        <div style={{ fontSize:11.5, color: drv.pos===true?"#16a34a":drv.pos===false?"#dc2626":"#6B7280", fontWeight:600, lineHeight:1.4, maxWidth:100 }}>
+                        <div style={{ fontSize:11.5, color: drv.pos===false?"#16a34a":drv.pos===true?"#dc2626":"#6B7280", fontWeight:600, lineHeight:1.4, maxWidth:100 }}>
                           {drv.text}
                         </div>
                       ); })()}
@@ -1114,6 +1122,8 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
               <div style={{ fontSize:11, color:T.textPlaceholder, flexShrink:0, marginLeft:12 }}>{PROGNOZA.zdroj}</div>
             </div>
           </div>
+
+          <ConcentrationInfoWidget T={T}/>
 
           <div style={{ marginTop:16, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div style={{ fontSize:11, color:"#D1D5DB" }}>Zdroj: ÚVZ SR · Stanice: RÚVZ BB, NR, KE, TT, ZA · ÚVZ SR BA</div>
@@ -1481,6 +1491,44 @@ function PollenTrendChart({ city, chosen, sens, weather, loading, T }) {
     </div>
   );
 }
+function ConcentrationInfoWidget({ T }) {
+  if (!T) T = LIGHT;
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="card" style={{ padding:"14px 18px", marginBottom:16 }}>
+      <button onClick={()=>setOpen(o=>!o)} style={{
+        width:"100%", background:"none", border:"none", cursor:"pointer",
+        display:"flex", alignItems:"center", justifyContent:"space-between",
+        fontFamily:"'Inter',sans-serif", padding:0,
+      }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ fontSize:14 }}>ℹ️</span>
+          <span style={{ fontSize:12.5, fontWeight:600, color:T.text }}>Čo znamenajú hodnoty peľu?</span>
+        </div>
+        <span style={{ fontSize:13, color:T.textFaint, transition:"transform .2s",
+          display:"inline-block", transform: open?"rotate(180deg)":"rotate(0deg)" }}>▼</span>
+      </button>
+      {open && (
+        <div style={{ marginTop:12, paddingTop:12, borderTop:`1px solid ${T.divider}` }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:10 }}>
+            {CONC_INFO.map((c,i) => (
+              <div key={i} style={{ background:c.bg, borderRadius:9, padding:"10px 10px",
+                border:`1px solid ${c.color}25` }}>
+                <div style={{ fontSize:11, fontWeight:700, color:c.color, marginBottom:2 }}>{c.label}</div>
+                <div style={{ fontSize:12, fontWeight:600, color:T.text, marginBottom:3 }}>{c.range} zŕn/m³</div>
+                <div style={{ fontSize:11, color:T.textMuted, lineHeight:1.4 }}>{c.desc}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize:10.5, color:T.textFaint, lineHeight:1.5, fontStyle:"italic" }}>
+            {CONC_NOTE}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DynamicStyles({ T }) {
   return (
     <style>{`
