@@ -1219,11 +1219,17 @@ function Sidebar({ page, setPage, city, setCity, chosen, toggle, sens, setSens, 
 
 const SK_DAYS = ["Nedeľa","Pondelok","Utorok","Streda","Štvrtok","Piatok","Sobota"];
 
-// Allergen line colors (fixed, decorative — not risk-level based)
-const ALLERGEN_LINE_COLORS = {
-  borovica:"#2e7d32", travy:"#65a30d", breza:"#a1643c",
-  lieska:"#d97706", ambrozia:"#dc2626", byliny:"#0d9488", huby:"#7c3aed",
-};
+// Trend direction colors — klesá=zelená (dobrá správa), stúpa=červená (zlá správa)
+const TREND_UP   = "#dc2626"; // stúpajúci peľ = zlé
+const TREND_DOWN = "#16a34a"; // klesajúci peľ = dobré
+const TREND_FLAT = "#94a3b8"; // stabilný
+
+function trendColor(scores) {
+  const slope = (scores[scores.length-1] - scores[0]) / Math.max(scores.length-1, 1);
+  if (slope >  0.15) return TREND_UP;
+  if (slope < -0.15) return TREND_DOWN;
+  return TREND_FLAT;
+}
 
 function PollenTrendChart({ city, chosen, sens, weather, loading, T }) {
   if (!T) T = LIGHT;
@@ -1240,246 +1246,210 @@ function PollenTrendChart({ city, chosen, sens, weather, loading, T }) {
   const hybrid = calcHybrid(city, chosen, sens, weather);
   const DAYS   = weather.length;
 
-  // SVG layout
-  const VW = 560, VH = 210;
-  const PAD = { t:16, r:18, b:44, l:54 };
+  // SVG layout — výška znížená o 1/3 (210→140)
+  const VW = 560, VH = 148;
+  const PAD = { t:12, r:18, b:42, l:52 };
   const CW  = VW - PAD.l - PAD.r;
   const CH  = VH - PAD.t - PAD.b;
 
-  const xAt = i  => PAD.l + (i / (DAYS - 1)) * CW;
-  const yAt = s  => PAD.t + CH * (1 - Math.min(s, 5) / 5);
+  const xAt = i => PAD.l + (i / (DAYS-1)) * CW;
+  const yAt = s => PAD.t + CH * (1 - Math.min(s,5)/5);
 
-  // Catmull-Rom → cubic bezier smooth path
   function smoothPath(scores) {
     const pts = scores.map((s,i) => [xAt(i), yAt(s)]);
     if (pts.length < 2) return "";
     let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
-    for (let i = 0; i < pts.length - 1; i++) {
+    for (let i = 0; i < pts.length-1; i++) {
       const [x0,y0] = pts[Math.max(0,i-1)];
-      const [x1,y1] = pts[i];
-      const [x2,y2] = pts[i+1];
+      const [x1,y1] = pts[i], [x2,y2] = pts[i+1];
       const [x3,y3] = pts[Math.min(pts.length-1,i+2)];
-      const cp1x = x1 + (x2-x0)/6, cp1y = y1 + (y2-y0)/6;
-      const cp2x = x2 - (x3-x1)/6, cp2y = y2 - (y3-y1)/6;
-      d += ` C${cp1x.toFixed(1)},${cp1y.toFixed(1)},${cp2x.toFixed(1)},${cp2y.toFixed(1)},${x2.toFixed(1)},${y2.toFixed(1)}`;
+      const cp1x=x1+(x2-x0)/6, cp1y=y1+(y2-y0)/6;
+      const cp2x=x2-(x3-x1)/6, cp2y=y2-(y3-y1)/6;
+      d+=` C${cp1x.toFixed(1)},${cp1y.toFixed(1)},${cp2x.toFixed(1)},${cp2y.toFixed(1)},${x2.toFixed(1)},${y2.toFixed(1)}`;
     }
     return d;
   }
 
-  const handleMouse = (e) => {
+  const handleMouse = e => {
     const svg = svgRef.current; if (!svg) return;
-    const rect  = svg.getBoundingClientRect();
-    const svgX  = ((e.clientX - rect.left) / rect.width) * VW;
-    let best = 0, bestDist = Infinity;
-    for (let i = 0; i < DAYS; i++) {
-      const d = Math.abs(xAt(i) - svgX);
-      if (d < bestDist) { bestDist = d; best = i; }
-    }
+    const rect = svg.getBoundingClientRect();
+    const svgX  = ((e.clientX-rect.left)/rect.width)*VW;
+    let best=0, bestD=Infinity;
+    for (let i=0;i<DAYS;i++) { const d=Math.abs(xAt(i)-svgX); if(d<bestD){bestD=d;best=i;} }
     setHoverIdx(best);
   };
 
-  const hDay = hoverIdx !== null ? weather[hoverIdx] : null;
-  const hDrv = hDay ? weatherDriver(hDay, hoverIdx > 0 ? weather[hoverIdx-1].rain : 0) : null;
+  const hDay = hoverIdx!==null ? weather[hoverIdx] : null;
+  const hDrv = hDay ? weatherDriver(hDay, hoverIdx>0?weather[hoverIdx-1].rain:0) : null;
 
-  // Risk band zones
+  // Risk bands (very subtle)
   const BANDS = [
-    { from:4, to:5, color:"#fef2f2" }, // Veľmi vysoká
-    { from:3, to:4, color:"#fff7ed" }, // Vysoká
-    { from:2, to:3, color:"#fefce8" }, // Stredná
-    { from:1, to:2, color:"#f7fee7" }, // Nízka
-    { from:0, to:1, color:"#f0fdf4" }, // Veľmi nízka
+    {from:4,to:5,color:"#fef2f2"},{from:3,to:4,color:"#fff7ed"},
+    {from:2,to:3,color:"#fefce8"},{from:1,to:2,color:"#f7fee7"},{from:0,to:1,color:"#f0fdf4"},
   ];
-  const Y_LABELS = [
-    [5,"V.Vysoká"],[4,"Vysoká"],[3,"Stredná"],[2,"Nízka"],[1,"V.Nízka"],
-  ];
+  const Y_LABELS = [[5,"V.Vysoká"],[4,"Vysoká"],[3,"Stredná"],[2,"Nízka"],[1,"V.Nízka"]];
+
+  // Per-allergen trend colors
+  const allergenColors = hybrid.map(h => trendColor(h.days.map(d=>d.score)));
 
   return (
-    <div className="card" style={{ padding:"20px 20px 14px", marginBottom:16 }}>
+    <div className="card" style={{ padding:"18px 20px 12px", marginBottom:16 }}>
 
-      {/* Header */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
+      {/* Header + legend */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
         <div>
-          <div className="lbl" style={{ marginBottom:2 }}>Trend peľu · 7 dní</div>
-          <div style={{ fontSize:10.5, color:T.textFaint }}>ÚVZ SR × fenológia × počasie</div>
+          <div className="lbl" style={{ marginBottom:1 }}>Trend peľu · 7 dní</div>
+          <div style={{ fontSize:10, color:T.textFaint }}>ÚVZ SR × fenológia × počasie</div>
         </div>
-        {/* Legend */}
-        <div style={{ display:"flex", flexWrap:"wrap", gap:"5px 10px", justifyContent:"flex-end", maxWidth:260 }}>
-          {hybrid.map(h => (
-            <div key={h.id} style={{ display:"flex", alignItems:"center", gap:5 }}>
-              <svg width="18" height="8"><line x1="0" y1="4" x2="18" y2="4" stroke={ALLERGEN_LINE_COLORS[h.id]||"#888"} strokeWidth="2.5" strokeLinecap="round"/></svg>
-              <span style={{ fontSize:10.5, color:T.textMuted }}>{h.emoji} {h.label}</span>
+        <div style={{ display:"flex", gap:"4px 10px", flexWrap:"wrap", justifyContent:"flex-end", maxWidth:280 }}>
+          {hybrid.map((h,hi) => (
+            <div key={h.id} style={{ display:"flex", alignItems:"center", gap:4 }}>
+              <svg width="16" height="6"><line x1="0" y1="3" x2="16" y2="3" stroke={allergenColors[hi]} strokeWidth="2" strokeLinecap="round"/></svg>
+              <span style={{ fontSize:10, color:T.textMuted }}>{h.emoji} {h.label}</span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Chart */}
+      {/* SVG */}
       <div style={{ position:"relative" }}>
         <svg ref={svgRef} viewBox={`0 0 ${VW} ${VH}`} width="100%"
           style={{ display:"block", cursor:"crosshair", userSelect:"none" }}
           onMouseMove={handleMouse} onMouseLeave={()=>setHoverIdx(null)}>
 
-          {/* Background risk bands */}
+          <defs>
+            {hybrid.map((h,hi) => {
+              const col = allergenColors[hi];
+              return (
+                <linearGradient key={h.id} id={`grad-${h.id}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={col} stopOpacity="0.18"/>
+                  <stop offset="100%" stopColor={col} stopOpacity="0.01"/>
+                </linearGradient>
+              );
+            })}
+          </defs>
+
+          {/* Risk bands */}
           {BANDS.map(b => (
             <rect key={b.from} x={PAD.l} y={yAt(b.to)} width={CW}
-              height={yAt(b.from)-yAt(b.to)} fill={b.color} opacity={0.55}/>
+              height={yAt(b.from)-yAt(b.to)} fill={b.color} opacity={0.5}/>
           ))}
 
-          {/* Horizontal grid lines */}
+          {/* Grid lines */}
           {[1,2,3,4,5].map(s => (
-            <g key={s}>
-              <line x1={PAD.l} x2={PAD.l+CW} y1={yAt(s)} y2={yAt(s)}
-                stroke={T.cardBorder} strokeWidth="1"/>
-            </g>
+            <line key={s} x1={PAD.l} x2={PAD.l+CW} y1={yAt(s)} y2={yAt(s)}
+              stroke={T.cardBorder} strokeWidth="0.8"/>
           ))}
 
-          {/* Y axis labels */}
+          {/* Y labels */}
           {Y_LABELS.map(([s,lbl]) => (
             <text key={s} x={PAD.l-6} y={yAt(s)+4}
-              textAnchor="end" fontSize="8.5" fill={T.textPlaceholder}>{lbl}</text>
+              textAnchor="end" fontSize="8" fill={T.textPlaceholder}>{lbl}</text>
           ))}
 
-          {/* X axis: day labels + weather icons as text */}
-          {weather.map((day, i) => {
+          {/* X labels: day name + date + emoji */}
+          {weather.map((day,i) => {
             const nm = i===0?"Dnes":i===1?"Zajtra":SK_DAYS[new Date(day.date).getDay()];
             const dt = new Date(day.date).toLocaleDateString("sk-SK",{day:"numeric",month:"numeric"});
             return (
               <g key={i}>
-                <text x={xAt(i)} y={VH-PAD.b+13} textAnchor="middle"
-                  fontSize="10" fontWeight={i===0?"700":"500"}
+                <text x={xAt(i)} y={VH-PAD.b+11} textAnchor="middle"
+                  fontSize="9.5" fontWeight={i===0?"700":"500"}
                   fill={i===0?"#3A7D44":T.textFaint}>{nm}</text>
-                <text x={xAt(i)} y={VH-PAD.b+24} textAnchor="middle"
-                  fontSize="8.5" fill={T.textPlaceholder}>{dt}</text>
-                {/* Weather emoji */}
-                <text x={xAt(i)} y={VH-PAD.b+37} textAnchor="middle" fontSize="11">{day.emoji}</text>
+                <text x={xAt(i)} y={VH-PAD.b+20} textAnchor="middle"
+                  fontSize="8" fill={T.textPlaceholder}>{dt}</text>
+                <text x={xAt(i)} y={VH-PAD.b+32} textAnchor="middle" fontSize="10">{day.emoji}</text>
               </g>
             );
           })}
 
-          {/* Area fills + lines */}
-          {hybrid.map(h => {
+          {/* Hover line */}
+          {hoverIdx!==null && (
+            <line x1={xAt(hoverIdx)} x2={xAt(hoverIdx)} y1={PAD.t} y2={PAD.t+CH}
+              stroke="#3A7D44" strokeWidth="1.5" strokeDasharray="3,3" opacity={0.45}/>
+          )}
+
+          {/* Area fills + lines + emoji dots */}
+          {hybrid.map((h,hi) => {
             const scores = h.days.map(d=>d.score);
-            const color  = ALLERGEN_LINE_COLORS[h.id] || "#888";
-            const linePth = smoothPath(scores);
-            const botY = yAt(0);
-            const areaPth = linePth + ` L${xAt(DAYS-1).toFixed(1)},${botY.toFixed(1)} L${xAt(0).toFixed(1)},${botY.toFixed(1)} Z`;
+            const col    = allergenColors[hi];
+            const line   = smoothPath(scores);
+            const area   = line+` L${xAt(DAYS-1).toFixed(1)},${yAt(0).toFixed(1)} L${xAt(0).toFixed(1)},${yAt(0).toFixed(1)} Z`;
             return (
               <g key={h.id}>
-                <path d={areaPth} fill={color} opacity={0.07}/>
-                <path d={linePth} fill="none" stroke={color} strokeWidth="2.5"
+                {/* Gradient area fill */}
+                <path d={area} fill={`url(#grad-${h.id})`}/>
+                {/* Line */}
+                <path d={line} fill="none" stroke={col} strokeWidth="2"
                   strokeLinecap="round" strokeLinejoin="round"/>
+                {/* Allergen emoji at each day instead of dots */}
                 {scores.map((s,i) => (
-                  <circle key={i} cx={xAt(i)} cy={yAt(s)}
-                    r={hoverIdx===i ? 5.5 : 3}
-                    fill={hoverIdx===i ? color : T.card}
-                    stroke={color} strokeWidth="2"
-                    style={{ transition:"r .12s" }}/>
+                  <text key={i} x={xAt(i)} y={yAt(s)+4}
+                    textAnchor="middle" fontSize={hoverIdx===i?"13":"10"}
+                    style={{ transition:"font-size .12s", userSelect:"none" }}
+                    dominantBaseline="middle">{h.emoji}</text>
                 ))}
               </g>
             );
           })}
-
-          {/* Hover vertical line */}
-          {hoverIdx !== null && (
-            <line x1={xAt(hoverIdx)} x2={xAt(hoverIdx)}
-              y1={PAD.t} y2={PAD.t+CH}
-              stroke="#3A7D44" strokeWidth="1.5" strokeDasharray="4,3" opacity={0.5}/>
-          )}
         </svg>
 
-        {/* Floating tooltip */}
-        {hoverIdx !== null && hDay && (
+        {/* Tooltip */}
+        {hoverIdx!==null && hDay && (
           <div style={{
             position:"absolute",
-            left: `${(xAt(hoverIdx)/VW)*100}%`,
-            top: "4px",
-            transform: hoverIdx >= DAYS-2 ? "translateX(-108%)"
-                     : hoverIdx === 0 ? "translateX(6px)"
-                     : "translateX(-50%)",
-            background: T.card,
-            border:`1.5px solid ${T.cardBorder}`,
+            left:`${(xAt(hoverIdx)/VW)*100}%`,
+            top:"2px",
+            transform: hoverIdx>=DAYS-2?"translateX(-108%)":hoverIdx===0?"translateX(6px)":"translateX(-50%)",
+            background:T.card, border:`1.5px solid ${T.cardBorder}`,
             borderRadius:10, padding:"10px 12px",
-            boxShadow:"0 4px 24px rgba(0,0,0,.13)",
-            minWidth:158, pointerEvents:"none", zIndex:10,
+            boxShadow:"0 4px 20px rgba(0,0,0,.12)",
+            minWidth:155, pointerEvents:"none", zIndex:10,
           }}>
-            {/* Day + weather */}
-            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8,
-              paddingBottom:7, borderBottom:`1px solid ${T.divider}` }}>
-              <span style={{ fontSize:22 }}>{hDay.emoji}</span>
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:7,
+              paddingBottom:6, borderBottom:`1px solid ${T.divider}` }}>
+              <span style={{ fontSize:20 }}>{hDay.emoji}</span>
               <div>
                 <div style={{ fontSize:12, fontWeight:700, color:T.text }}>
                   {hoverIdx===0?"Dnes":hoverIdx===1?"Zajtra":SK_DAYS[new Date(hDay.date).getDay()]}
-                  <span style={{ fontSize:10, fontWeight:400, color:T.textFaint, marginLeft:5 }}>
+                  <span style={{ fontSize:9, fontWeight:400, color:T.textFaint, marginLeft:4 }}>
                     {new Date(hDay.date).toLocaleDateString("sk-SK",{day:"numeric",month:"numeric"})}
                   </span>
                 </div>
-                <div style={{ fontSize:11, color:T.textMuted }}>
-                  {Math.round(hDay.temp)}°C
-                  {hDay.rain>0.5?` · 💧${hDay.rain.toFixed(0)}mm`:""}
+                <div style={{ fontSize:10.5, color:T.textMuted }}>
+                  {Math.round(hDay.temp)}°C{hDay.rain>0.5?` · 💧${hDay.rain.toFixed(0)}mm`:""}
                   {hDay.wind>15?` · 💨${Math.round(hDay.wind)}km/h`:""}
                 </div>
               </div>
             </div>
-            {/* Allergen levels */}
-            {hybrid.map(h => {
+            {hybrid.map((h,hi) => {
               const ds  = h.days[hoverIdx];
-              const col = ALLERGEN_LINE_COLORS[h.id] || "#888";
+              const col = allergenColors[hi];
               return (
-                <div key={h.id} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
-                  <div style={{ width:10, height:10, borderRadius:"50%", background:col, flexShrink:0 }}/>
-                  <span style={{ fontSize:11, color:T.textSub, flex:1 }}>{h.emoji} {h.label}</span>
-                  <span style={{ fontSize:11, fontWeight:700, color:col }}>{ds.uroven}</span>
+                <div key={h.id} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
+                  <div style={{ width:8, height:8, borderRadius:"50%", background:col, flexShrink:0 }}/>
+                  <span style={{ fontSize:10.5, color:T.textSub, flex:1 }}>{h.emoji} {h.label}</span>
+                  <span style={{ fontSize:10.5, fontWeight:700, color:col }}>{ds.uroven}</span>
                 </div>
               );
             })}
-            {/* Driver */}
             {hDrv && (
-              <div style={{ marginTop:6, paddingTop:6, borderTop:`1px solid ${T.divider}`,
-                fontSize:10.5, fontWeight:600,
-                color:hDrv.pos===true?"#16a34a":hDrv.pos===false?"#dc2626":T.textMuted }}>
-                {hDrv.pos===true?"↑ ":hDrv.pos===false?"↓ ":"→ "}{hDrv.text}
+              <div style={{ marginTop:5, paddingTop:5, borderTop:`1px solid ${T.divider}`,
+                fontSize:10, fontWeight:600,
+                color:hDrv.pos===false?"#16a34a":hDrv.pos===true?"#dc2626":T.textMuted }}>
+                {hDrv.pos===false?"↓ ":hDrv.pos===true?"↑ ":"→ "}{hDrv.text}
               </div>
             )}
           </div>
         )}
       </div>
 
-      <div style={{ fontSize:10, color:T.textPlaceholder, textAlign:"right", marginTop:4 }}>
-        Prechádzaj kurzorom nad grafom pre detail dňa
+      <div style={{ fontSize:9.5, color:T.textPlaceholder, textAlign:"right", marginTop:3 }}>
+        Prechod kurzorom = detail · 🟢 klesá · 🔴 stúpa
       </div>
     </div>
   );
-}function DynamicStyles({ T }) {
-  return (
-    <style>{`
-      .card {
-        background: ${T.card} !important;
-        border: 1px solid ${T.cardBorder} !important;
-        box-shadow: 0 2px 18px rgba(0,0,0,${T === DARK ? ".25" : ".07"}) !important;
-        transition: background .3s, border .3s !important;
-      }
-      .lbl { color: ${T.lbl} !important; }
-      body { background: ${T.bg}; transition: background .3s; }
-
-      /* Mobile nav */
-      .mobile-nav { background: ${T.navBg} !important; border-top: 1px solid ${T.navBorder} !important; }
-      .mobile-nav-btn { color: ${T.textFaint} !important; }
-      .mobile-nav-btn.on { color: ${T.accentText} !important; }
-      .mobile-back { background: ${T.card} !important; border-bottom: 1px solid ${T.cardBorder} !important; }
-
-      /* Scrollbar */
-      ::-webkit-scrollbar-thumb { background: ${T.cardBorder}; }
-
-      /* Calendar */
-      .cal-header { background: ${T.card}; }
-      .cal-cat-label { background: ${T.bg} !important; }
-
-      /* Select in sidebar */
-      select { background: ${T.input} !important; color: ${T.text} !important; border-color: ${T.inputBorder} !important; }
-    `}</style>
-  );
 }
-
 /* ══ ROOT APP ══ */
 export default function App() {
   const [page,    setPage]    = useState("forecast");
