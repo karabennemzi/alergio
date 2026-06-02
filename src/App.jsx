@@ -1221,155 +1221,186 @@ const SK_DAYS = ["Nedeľa","Pondelok","Utorok","Streda","Štvrtok","Piatok","Sob
 
 function WeatherForecastWidget({ city, chosen, sens, weather, loading, T }) {
   if (!T) T = LIGHT;
-  const [startIdx, setStartIdx] = useState(0);
+  const [page,    setPage]    = useState(0);
+  const [sliding, setSliding] = useState(null); // 'left' | 'right' | null
 
   if (loading) return (
-    <div className="card" style={{ padding:24, textAlign:"center", marginBottom:16 }}>
-      <div style={{ fontSize:13, color:T.textFaint }}>⏳ Sťahujem predpoveď počasia z Open-Meteo…</div>
+    <div className="card" style={{ padding:20, textAlign:"center", marginBottom:16 }}>
+      <div style={{ fontSize:13, color:T.textFaint }}>⏳ Sťahujem predpoveď počasia…</div>
     </div>
   );
   if (!weather || !weather.length) return null;
 
-  const hybrid    = calcHybrid(city, chosen, sens, weather);
-  const TOTAL     = weather.length;          // 7
-  // Desktop: 4 visible, mobile: 3 (via CSS)
-  const VISIBLE_D = 4;
-  const VISIBLE_M = 3;
-  const maxStart  = TOTAL - VISIBLE_D;       // 3 → can scroll up to index 3
+  const hybrid   = calcHybrid(city, chosen, sens, weather);
+  const TOTAL    = weather.length;      // 7
+  // Pages: desktop=4 per page, mobile=3 (CSS hides 4th col)
+  const PER_PAGE = 4;
+  const maxPage  = Math.ceil(TOTAL / PER_PAGE) - 1; // 1 (pages 0 and 1)
 
-  const prev = () => setStartIdx(s => Math.max(0, s - 1));
-  const next = () => setStartIdx(s => Math.min(maxStart, s + 1));
-  const visibleDays = weather.slice(startIdx, startIdx + VISIBLE_D + 1); // +1 so mobile sees 3 of 4
+  const go = (dir) => {
+    const next = page + dir;
+    if (next < 0 || next > maxPage) return;
+    setSliding(dir > 0 ? 'left' : 'right');
+    setTimeout(() => { setPage(next); setSliding(null); }, 280);
+  };
 
-  const NavBtn = ({ onClick, disabled, children }) => (
-    <button onClick={onClick} disabled={disabled} style={{
-      width:30, height:30, border:`1.5px solid ${disabled ? T.divider : T.cardBorder}`,
-      borderRadius:8, background: disabled ? "transparent" : T.card,
-      color: disabled ? T.textPlaceholder : T.textMuted,
-      cursor: disabled ? "not-allowed" : "pointer",
-      fontSize:14, display:"flex", alignItems:"center", justifyContent:"center",
-      transition:"all .15s", fontFamily:"'Inter',sans-serif",
-      flexShrink:0,
-    }}>{children}</button>
-  );
+  // Days on current page
+  const pageStart = page * PER_PAGE;
+  const pageDays  = weather.slice(pageStart, pageStart + PER_PAGE);
+
+  // Today's data for compact header
+  const today     = weather[0];
+  const todayDate = new Date(today.date).toLocaleDateString("sk-SK", {day:"numeric", month:"numeric"});
+  const todayDrv  = weatherDriver(today, 0);
 
   return (
-    <div className="card" style={{ padding:24, marginBottom:16 }}>
-      {/* Header */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
-        <div>
-          <div className="lbl" style={{ marginBottom:0 }}>Predpoveď peľu</div>
-          <div style={{ fontSize:11, color:T.textFaint, marginTop:2 }}>ÚVZ SR × fenológia × počasie Open-Meteo</div>
-        </div>
-        {/* Carousel navigation */}
-        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-          {/* Dot indicators */}
-          <div style={{ display:"flex", gap:4, marginRight:4 }}>
-            {Array.from({length: maxStart + 1}).map((_, i) => (
-              <button key={i} onClick={()=>setStartIdx(i)} style={{
-                width: i===startIdx ? 16 : 6, height:6, borderRadius:3,
-                background: i===startIdx ? "#3A7D44" : T.divider,
-                border:"none", cursor:"pointer", transition:"all .25s", padding:0,
-              }}/>
-            ))}
+    <div className="card" style={{ padding:20, marginBottom:16, overflow:"hidden" }}>
+
+      {/* ── Compact header ── */}
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+
+        {/* Left: Dnes label + date + driver */}
+        <div style={{ display:"flex", flexDirection:"column", minWidth:0 }}>
+          <div style={{ display:"flex", alignItems:"baseline", gap:6 }}>
+            <span style={{ fontSize:11, fontWeight:700, color:T.lbl, textTransform:"uppercase", letterSpacing:.8 }}>Dnes</span>
+            <span style={{ fontSize:11, color:T.textFaint }}>{todayDate}</span>
           </div>
-          <NavBtn onClick={prev} disabled={startIdx === 0}>‹</NavBtn>
-          <NavBtn onClick={next} disabled={startIdx >= maxStart}>›</NavBtn>
+          <div style={{ fontSize:11.5, fontWeight:600, marginTop:1,
+            color: todayDrv.pos===true?"#16a34a" : todayDrv.pos===false?"#dc2626" : T.textMuted }}>
+            {todayDrv.text}
+          </div>
+        </div>
+
+        {/* Spacer */}
+        <div style={{ flex:1 }}/>
+
+        {/* Right: weather icon + temp */}
+        <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
+          <span style={{ fontSize:28, lineHeight:1 }}>{today.emoji}</span>
+          <div style={{ textAlign:"right" }}>
+            <div style={{ fontSize:16, fontWeight:700, color:T.text }}>{Math.round(today.temp)}°C</div>
+            {today.rain > 0.5 && (
+              <div style={{ fontSize:10, color:"#3b82f6", fontWeight:600 }}>💧{today.rain.toFixed(0)}mm</div>
+            )}
+          </div>
+        </div>
+
+        {/* Nav arrows */}
+        <div style={{ display:"flex", gap:5, flexShrink:0, marginLeft:8 }}>
+          {[[-1,"‹"],[1,"›"]].map(([dir,lbl]) => {
+            const disabled = dir < 0 ? page===0 : page>=maxPage;
+            return (
+              <button key={dir} onClick={()=>go(dir)} disabled={disabled} style={{
+                width:34, height:34, border:`1.5px solid ${disabled?T.divider:T.cardBorder}`,
+                borderRadius:9, background: disabled?"transparent":T.card,
+                color: disabled?T.textPlaceholder:T.text,
+                cursor: disabled?"not-allowed":"pointer",
+                fontSize:18, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center",
+                transition:"all .15s", lineHeight:1,
+              }}>{lbl}</button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Days grid — CSS controls 4 vs 3 visible */}
-      <div className="forecast-carousel" style={{ display:"grid", gridTemplateColumns:`repeat(${VISIBLE_D},1fr)`, gap:8, marginBottom:14, overflow:"hidden" }}>
-        {visibleDays.slice(0, VISIBLE_D).map((day, vi) => {
-          const i = startIdx + vi;
-          const scores   = hybrid.map(h => h.days[i]?.score || 0);
-          const maxScore = Math.max(...scores, 0);
-          const rc  = COL[S2L[maxScore]] || "#9CA3AF";
-          const rb  = BG[S2L[maxScore]]  || T.card;
-          const isToday   = i === 0;
-          const isTomorrow = i === 1;
-          const dayName = isToday ? "Dnes" : isTomorrow ? "Zajtra" : SK_DAYS[new Date(day.date).getDay()];
-          const dateStr = new Date(day.date).toLocaleDateString("sk-SK", {day:"numeric", month:"numeric"});
-          const prevRain  = i > 0 ? weather[i-1].rain : 0;
-          const drv = weatherDriver(day, prevRain);
+      {/* ── Page dots ── */}
+      <div style={{ display:"flex", justifyContent:"center", gap:6, marginBottom:12 }}>
+        {Array.from({length: maxPage+1}).map((_,i) => (
+          <button key={i} onClick={()=>{ if(i!==page) go(i-page); }} style={{
+            width: i===page?22:7, height:7, borderRadius:4, border:"none",
+            background: i===page?"#3A7D44":T.divider,
+            cursor:"pointer", transition:"all .28s", padding:0,
+          }}/>
+        ))}
+      </div>
 
-          return (
-            <div key={i} style={{
-              background: rb,
-              border: `1.5px solid ${isToday ? rc+"80" : rc+"30"}`,
-              borderRadius:12, padding:"12px 8px", textAlign:"center",
-              display:"flex", flexDirection:"column", gap:4,
-              boxShadow: isToday ? `0 0 0 2px ${rc}20` : "none",
-              transition:"all .3s",
-            }}>
-              {/* Day name */}
-              <div style={{ fontSize:11, fontWeight:700, color: isToday ? rc : T.textFaint, textTransform:"uppercase", letterSpacing:.5 }}>
-                {dayName}
-              </div>
-              <div style={{ fontSize:10, color:T.textPlaceholder }}>{dateStr}</div>
+      {/* ── Carousel viewport ── */}
+      <div style={{ overflow:"hidden", borderRadius:10 }}>
+        <div style={{
+          display:"grid", gridTemplateColumns:`repeat(${PER_PAGE},1fr)`, gap:8,
+          transform: sliding==="left"  ? "translateX(-6%)" :
+                     sliding==="right" ? "translateX(6%)"  : "translateX(0)",
+          opacity: sliding ? 0.3 : 1,
+          transition: sliding ? "transform .28s ease, opacity .28s ease" : "none",
+        }}>
+          {pageDays.map((day, vi) => {
+            const i      = pageStart + vi;
+            const scores = hybrid.map(h => h.days[i]?.score || 0);
+            const maxS   = Math.max(...scores, 0);
+            const rc     = COL[S2L[maxS]] || "#9CA3AF";
+            const rb     = BG[S2L[maxS]]  || T.card;
+            const isToday = i === 0;
+            const dName  = isToday ? "Dnes" : i===1 ? "Zajtra" : SK_DAYS[new Date(day.date).getDay()];
+            const dDate  = new Date(day.date).toLocaleDateString("sk-SK",{day:"numeric",month:"numeric"});
+            const prevRain = i>0 ? weather[i-1].rain : 0;
+            const drv    = weatherDriver(day, prevRain);
 
-              {/* Weather icon */}
-              <div style={{ fontSize:26, lineHeight:1.15, margin:"2px 0" }}>{day.emoji}</div>
-
-              {/* Temp + rain */}
-              <div style={{ fontSize:14, fontWeight:700, color:T.text }}>{Math.round(day.temp)}°C</div>
-              {day.rain > 0.5
-                ? <div style={{ fontSize:10, color:"#3b82f6", fontWeight:600 }}>💧 {day.rain.toFixed(0)}mm</div>
-                : <div style={{ fontSize:10, color:T.textPlaceholder }}>Bez zrážok</div>
-              }
-
-              {/* Divider */}
-              <div style={{ height:1, background:T.divider, margin:"4px 0" }}/>
-
-              {/* Overall risk */}
-              <div style={{ fontSize:12, fontWeight:700, color:rc }}>{S2L[maxScore]||"—"}</div>
-
-              {/* Per-allergen bars */}
-              <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                {hybrid.map(h => {
-                  const ds  = h.days[i];
-                  const col = COL[ds.uroven] || "#E5E7EB";
-                  return (
-                    <div key={h.id} style={{ display:"flex", alignItems:"center", gap:3 }}>
-                      <span style={{ fontSize:10, minWidth:14, lineHeight:1 }}>{h.emoji}</span>
-                      <div style={{ flex:1, height:5, borderRadius:3, background:T.divider, overflow:"hidden" }}>
-                        <div style={{ height:"100%", width:`${(ds.score/5)*100}%`, background:col, borderRadius:3, transition:"width .4s" }}/>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Divider */}
-              <div style={{ height:1, background:T.divider, margin:"2px 0" }}/>
-
-              {/* Weather driver */}
-              <div style={{
-                fontSize:9, lineHeight:1.4,
-                color: drv.pos===true?"#16a34a" : drv.pos===false?"#dc2626" : T.textMuted,
-                fontWeight: drv.pos!==null ? 600 : 400,
-                minHeight:24,
+            return (
+              <div key={i} style={{
+                background:rb, border:`1.5px solid ${isToday?rc+"90":rc+"28"}`,
+                borderRadius:12, padding:"12px 8px", textAlign:"center",
+                display:"flex", flexDirection:"column", gap:5,
               }}>
-                {drv.text}
+                {/* Day + date */}
+                <div>
+                  <div style={{ fontSize:11, fontWeight:700, color:isToday?rc:T.textFaint, textTransform:"uppercase", letterSpacing:.5 }}>{dName}</div>
+                  <div style={{ fontSize:10, color:T.textPlaceholder, marginTop:1 }}>{dDate}</div>
+                </div>
+
+                {/* Weather */}
+                <div style={{ fontSize:28, lineHeight:1.1 }}>{day.emoji}</div>
+                <div style={{ fontSize:14, fontWeight:700, color:T.text }}>{Math.round(day.temp)}°C</div>
+                {day.rain > 0.5
+                  ? <div style={{ fontSize:10, color:"#3b82f6", fontWeight:600 }}>💧{day.rain.toFixed(0)}mm</div>
+                  : <div style={{ fontSize:10, color:T.textPlaceholder }}>—</div>
+                }
+
+                {/* Risk label */}
+                <div style={{ fontSize:11, fontWeight:700, color:rc, marginTop:1 }}>{S2L[maxS]||"—"}</div>
+
+                {/* Divider */}
+                <div style={{ height:1, background:T.divider }}/>
+
+                {/* Allergen bars — bigger emoji + text */}
+                <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                  {hybrid.map(h => {
+                    const ds  = h.days[i];
+                    const col = COL[ds.uroven] || "#E5E7EB";
+                    return (
+                      <div key={h.id} style={{ display:"flex", alignItems:"center", gap:4 }}>
+                        <span style={{ fontSize:13, minWidth:18, lineHeight:1 }}>{h.emoji}</span>
+                        <div style={{ flex:1, height:6, borderRadius:3, background:T.divider, overflow:"hidden" }}>
+                          <div style={{ height:"100%", width:`${(ds.score/5)*100}%`, background:col, borderRadius:3, transition:"width .4s" }}/>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Divider */}
+                <div style={{ height:1, background:T.divider }}/>
+
+                {/* Driver — bigger + arrow prefix */}
+                <div style={{
+                  fontSize:10, lineHeight:1.4, fontWeight:600, minHeight:26,
+                  color: drv.pos===true?"#16a34a" : drv.pos===false?"#dc2626" : T.textMuted,
+                }}>
+                  {drv.pos===true?"↑ " : drv.pos===false?"↓ " : "→ "}
+                  {drv.text}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
-      {/* Range label */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <div style={{ display:"flex", gap:16, flexWrap:"wrap", fontSize:11, color:T.textMuted }}>
-          <span>🔬 Model: ÚVZ SR × fenológia × počasie</span>
-        </div>
-        <div style={{ fontSize:11, color:T.textPlaceholder }}>
-          {startIdx + 1}–{Math.min(startIdx + VISIBLE_D, TOTAL)} / {TOTAL} dní
-        </div>
+      {/* Footer */}
+      <div style={{ marginTop:12, fontSize:10.5, color:T.textPlaceholder, textAlign:"center" }}>
+        ÚVZ SR × fenológia × Open-Meteo · {pageStart+1}–{Math.min(pageStart+PER_PAGE,TOTAL)} z {TOTAL} dní
       </div>
     </div>
   );
 }
-
 function DynamicStyles({ T }) {
   return (
     <style>{`
