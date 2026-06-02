@@ -1450,6 +1450,28 @@ function PollenTrendChart({ city, chosen, sens, weather, loading, T }) {
     </div>
   );
 }
+function DynamicStyles({ T }) {
+  return (
+    <style>{`
+      .card {
+        background: ${T.card} !important;
+        border: 1px solid ${T.cardBorder} !important;
+        box-shadow: 0 2px 18px rgba(0,0,0,${T === DARK ? ".25" : ".07"}) !important;
+        transition: background .3s, border .3s !important;
+      }
+      .lbl { color: ${T.lbl} !important; }
+      body { background: ${T.bg}; transition: background .3s; }
+      .mobile-nav { background: ${T.navBg} !important; border-top: 1px solid ${T.navBorder} !important; }
+      .mobile-nav-btn { color: ${T.textFaint} !important; }
+      .mobile-nav-btn.on { color: ${T.accentText} !important; }
+      .mobile-back { background: ${T.card} !important; border-bottom: 1px solid ${T.cardBorder} !important; }
+      ::-webkit-scrollbar-thumb { background: ${T.cardBorder}; }
+      .cal-cat-label { background: ${T.bg} !important; }
+      select { background: ${T.input} !important; color: ${T.text} !important; border-color: ${T.inputBorder} !important; }
+    `}</style>
+  );
+}
+
 /* ══ ROOT APP ══ */
 export default function App() {
   const [page,    setPage]    = useState("forecast");
