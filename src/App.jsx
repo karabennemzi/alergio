@@ -983,8 +983,13 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
                     {weather.slice(1, 4).map((day, i) => {
                       const dayIdx = i + 1;
                       const prevRain = weather[dayIdx - 1]?.rain || 0;
-                      // Compute max pollen score for this day from calcForecast outlook
-                      const outlookScore = forecast?.days?.[i]?.s || 0;
+                      // Use hybrid (weather-adjusted) if available, fallback to calcForecast
+                      const hybridScores = weather?.length
+                        ? calcHybrid(city, chosen, sens, weather).map(h => h.days[i+1]?.score || 0)
+                        : [];
+                      const outlookScore = hybridScores.length
+                        ? Math.max(...hybridScores, 0)
+                        : (forecast?.days?.[i]?.s || 0);
                       const dc = COL[S2L[outlookScore]] || "#9CA3AF";
                       const drv = weatherDriver(day, prevRain);
                       const dayLabel = i === 0 ? "Zajtra" : i === 1 ? "Pozajtra" : "Za 3 dni";
@@ -1301,13 +1306,29 @@ function PollenTrendChart({ city, chosen, sens, weather, loading, T }) {
           <div className="lbl" style={{ marginBottom:1 }}>Trend peľu · 7 dní</div>
           <div style={{ fontSize:10, color:T.textFaint }}>ÚVZ SR × fenológia × počasie</div>
         </div>
-        <div style={{ display:"flex", gap:"4px 10px", flexWrap:"wrap", justifyContent:"flex-end", maxWidth:280 }}>
-          {hybrid.map((h,hi) => (
-            <div key={h.id} style={{ display:"flex", alignItems:"center", gap:4 }}>
-              <svg width="16" height="6"><line x1="0" y1="3" x2="16" y2="3" stroke={allergenColors[hi]} strokeWidth="2" strokeLinecap="round"/></svg>
-              <span style={{ fontSize:10, color:T.textMuted }}>{h.emoji} {h.label}</span>
-            </div>
-          ))}
+        <div style={{ display:"flex", flexDirection:"column", gap:4, alignItems:"flex-end" }}>
+          {/* Allergen list with trend arrow */}
+          <div style={{ display:"flex", gap:"4px 10px", flexWrap:"wrap", justifyContent:"flex-end", maxWidth:300 }}>
+            {hybrid.map((h,hi) => {
+              const scores = h.days.map(d=>d.score);
+              const slope  = (scores[scores.length-1]-scores[0]) / Math.max(scores.length-1,1);
+              const isUp   = slope > 0.15;
+              const isDn   = slope < -0.15;
+              return (
+                <div key={h.id} style={{ display:"flex", alignItems:"center", gap:4 }}>
+                  <span style={{ fontSize:9, fontWeight:700, color:isDn?"#16a34a":isUp?"#dc2626":"#94a3b8" }}>
+                    {isDn?"↓":isUp?"↑":"→"}
+                  </span>
+                  <span style={{ fontSize:10, color:T.textMuted }}>{h.emoji} {h.label}</span>
+                </div>
+              );
+            })}
+          </div>
+          {/* Color scale hint */}
+          <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+            <div style={{ width:40, height:4, borderRadius:2, background:"linear-gradient(to right,#16a34a,#f59e0b,#dc2626)" }}/>
+            <span style={{ fontSize:9, color:T.textPlaceholder }}>nízky → vysoký peľ</span>
+          </div>
         </div>
       </div>
 
@@ -1318,22 +1339,31 @@ function PollenTrendChart({ city, chosen, sens, weather, loading, T }) {
           onMouseMove={handleMouse} onMouseLeave={()=>setHoverIdx(null)}>
 
           <defs>
-            {hybrid.map((h,hi) => {
-              const col = allergenColors[hi];
-              return (
-                <linearGradient key={h.id} id={`grad-${h.id}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={col} stopOpacity="0.18"/>
-                  <stop offset="100%" stopColor={col} stopOpacity="0.01"/>
-                </linearGradient>
-              );
-            })}
+            {/* Vertical Y-based gradient: red at top (high pollen=bad), green at bottom (low=good) */}
+            <linearGradient id="y-grad-line" x1="0" y1={PAD.t} x2="0" y2={PAD.t+CH} gradientUnits="userSpaceOnUse">
+              <stop offset="0%"   stopColor="#dc2626"/>
+              <stop offset="50%"  stopColor="#f59e0b"/>
+              <stop offset="100%" stopColor="#16a34a"/>
+            </linearGradient>
+            {/* Area fill gradient per line — very subtle */}
+            {hybrid.map((h,hi) => (
+              <linearGradient key={h.id} id={`area-${h.id}`} x1="0" y1={PAD.t} x2="0" y2={PAD.t+CH} gradientUnits="userSpaceOnUse">
+                <stop offset="0%"   stopColor="#dc2626" stopOpacity="0.10"/>
+                <stop offset="50%"  stopColor="#f59e0b" stopOpacity="0.05"/>
+                <stop offset="100%" stopColor="#16a34a" stopOpacity="0.02"/>
+              </linearGradient>
+            ))}
           </defs>
 
-          {/* Risk bands */}
-          {BANDS.map(b => (
-            <rect key={b.from} x={PAD.l} y={yAt(b.to)} width={CW}
-              height={yAt(b.from)-yAt(b.to)} fill={b.color} opacity={0.5}/>
-          ))}
+          {/* Minimal background — single subtle gradient wash */}
+          <defs>
+            <linearGradient id="bg-wash" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#fef2f2" stopOpacity="0.6"/>
+              <stop offset="60%" stopColor="#fefce8" stopOpacity="0.3"/>
+              <stop offset="100%" stopColor="#f0fdf4" stopOpacity="0.5"/>
+            </linearGradient>
+          </defs>
+          <rect x={PAD.l} y={PAD.t} width={CW} height={CH} fill="url(#bg-wash)" rx="4"/>
 
           {/* Grid lines */}
           {[1,2,3,4,5].map(s => (
@@ -1377,16 +1407,17 @@ function PollenTrendChart({ city, chosen, sens, weather, loading, T }) {
             const area   = line+` L${xAt(DAYS-1).toFixed(1)},${yAt(0).toFixed(1)} L${xAt(0).toFixed(1)},${yAt(0).toFixed(1)} Z`;
             return (
               <g key={h.id}>
-                {/* Gradient area fill */}
-                <path d={area} fill={`url(#grad-${h.id})`}/>
-                {/* Line */}
-                <path d={line} fill="none" stroke={col} strokeWidth="2"
-                  strokeLinecap="round" strokeLinejoin="round"/>
-                {/* Allergen emoji at each day instead of dots */}
+                {/* Subtle area fill — Y-gradient */}
+                <path d={area} fill={`url(#area-${h.id})`}/>
+                {/* Line — thin, Y-gradient stroke */}
+                <path d={line} fill="none" stroke="url(#y-grad-line)" strokeWidth="1.5"
+                  strokeLinecap="round" strokeLinejoin="round" opacity={0.85}/>
+                {/* Small emoji at each point — grows on hover */}
                 {scores.map((s,i) => (
-                  <text key={i} x={xAt(i)} y={yAt(s)+4}
-                    textAnchor="middle" fontSize={hoverIdx===i?"13":"10"}
-                    style={{ transition:"font-size .12s", userSelect:"none" }}
+                  <text key={i} x={xAt(i)} y={yAt(s)}
+                    textAnchor="middle"
+                    fontSize={hoverIdx===i ? "11" : "9"}
+                    style={{ transition:"font-size .15s", userSelect:"none" }}
                     dominantBaseline="middle">{h.emoji}</text>
                 ))}
               </g>
