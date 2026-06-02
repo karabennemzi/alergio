@@ -1052,6 +1052,9 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
 
           <PollenTrendChart city={city} chosen={chosen} sens={sens} weather={weather} loading={weatherLoading} T={T}/>
 
+          {/* Concentration scale — directly below chart */}
+          <ConcentrationInfoWidget T={T}/>
+
           <div className="main-grid" style={{ display:"grid", gridTemplateColumns:"1.2fr 1fr", gap:16, marginBottom:16 }}>
             <div className="card" style={{ padding:24 }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
@@ -1122,8 +1125,6 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
               <div style={{ fontSize:11, color:T.textPlaceholder, flexShrink:0, marginLeft:12 }}>{PROGNOZA.zdroj}</div>
             </div>
           </div>
-
-          <ConcentrationInfoWidget T={T}/>
 
           <div style={{ marginTop:16, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div style={{ fontSize:11, color:"#D1D5DB" }}>Zdroj: ÚVZ SR · Stanice: RÚVZ BB, NR, KE, TT, ZA · ÚVZ SR BA</div>
