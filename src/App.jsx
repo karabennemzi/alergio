@@ -1,8 +1,68 @@
 import { useState, useEffect } from "react";
 
+/* ══ THEME TOKENS ══════════════════════════════════════════════ */
+const LIGHT = {
+  bg:           "#F8FAF8",
+  card:         "#ffffff",
+  cardBorder:   "#EAECF0",
+  sidebar:      "#ffffff",
+  sidebarBorder:"#EAECF0",
+  text:         "#111827",
+  textSub:      "#374151",
+  textMuted:    "#6B7280",
+  textFaint:    "#9CA3AF",
+  textPlaceholder:"#D1D5DB",
+  lbl:          "#9CA3AF",
+  divider:      "#F3F4F6",
+  input:        "#ffffff",
+  inputBorder:  "#E5E7EB",
+  chipBg:       "#ffffff",
+  chipBorder:   "#E5E7EB",
+  navBg:        "#ffffff",
+  navBorder:    "#EAECF0",
+  accent:       "#1a3622",
+  accentLight:  "#ECFDF5",
+  accentText:   "#166534",
+  infoRow:      "#F8FAFF",
+  tipBg:        "#F8F7FF",
+  tipBorder:    "#8B5CF6",
+  tipText:      "#5B21B6",
+  toggleBg:     "#F3F4F6",
+  toggleIcon:   "🌙",
+};
+const DARK = {
+  bg:           "#0d1a0e",
+  card:         "#162318",
+  cardBorder:   "#1e3824",
+  sidebar:      "#111f13",
+  sidebarBorder:"#1e3824",
+  text:         "#f0fdf4",
+  textSub:      "#d1fae5",
+  textMuted:    "#6ee7b7",
+  textFaint:    "#34d399",
+  textPlaceholder:"#1e3824",
+  lbl:          "#4ade80",
+  divider:      "#1a2e1c",
+  input:        "#162318",
+  inputBorder:  "#1e3824",
+  chipBg:       "#162318",
+  chipBorder:   "#1e3824",
+  navBg:        "#111f13",
+  navBorder:    "#1e3824",
+  accent:       "#22c55e",
+  accentLight:  "#052e16",
+  accentText:   "#4ade80",
+  infoRow:      "#0d1a0e",
+  tipBg:        "#1e1b4b",
+  tipBorder:    "#7c3aed",
+  tipText:      "#c4b5fd",
+  toggleBg:     "#1e3824",
+  toggleIcon:   "☀️",
+};
+
 /* ══════════════════════════════════════════════════════════════
-   DÁTA — ÚVZ SR
-   21. týždeň 2026 · aktualizované 27.5.2026
+   DÁTA — ÚVZ SR / pelovespravodajstvo.sk
+   21. týždeň 2026
    ══════════════════════════════════════════════════════════════ */
 const POLLEN_DATA = {
   borovica: { label: "Borovica / Ihličnany", short: "Borovica", emoji: "🌲", uroven: "Veľmi vysoká", skore: 5, sezona: true, pelZrn: "2 373 zŕn/m³ (Žilina) · 656 zŕn/m³ (Nitra)", trend: "↘ klesá", komentar: "Dominantný alergén týždňa — viditeľné žlté povlaky na autách a terasách. Ihličnany dokvitajú.", outlook: [4,3,2] },
@@ -172,6 +232,349 @@ const PROGNOZA = {
 const SENS_MULT = { "nízka":0.8, "stredná":1.0, "vysoká":1.25 };
 const S2L = ["","Veľmi nízka","Nízka","Stredná","Vysoká","Veľmi vysoká"];
 const DAYS = ["Zajtra","Pozajtra","Za 3 dni"];
+
+const CITY_COORDS = {
+  "Bratislava":      [48.1486, 17.1077],
+  "Košice":          [48.7164, 21.2611],
+  "Prešov":          [48.9985, 21.2396],
+  "Žilina":          [49.2232, 18.7394],
+  "Banská Bystrica": [48.7395, 19.1530],
+  "Nitra":           [48.3069, 18.0864],
+  "Trnava":          [48.3774, 17.5884],
+  "Trenčín":         [48.8943, 18.0440],
+};
+
+// Fenologické trendy — týždenné multiplikátory od 21. týždňa
+// Vychádza z historických pozorovaní SR (ÚVZ SR + ČHMÚ referenčné dáta)
+const FENO_BASE_WEEK = 21;
+const FENO = {
+  borovica: [1.00, 0.65, 0.40, 0.25, 0.15, 0.10, 0.08], // dokvitá — rýchly pokles
+  travy:    [1.00, 1.40, 1.75, 1.85, 1.75, 1.50, 1.20], // vrcholí jún–júl
+  byliny:   [1.00, 1.20, 1.35, 1.50, 1.55, 1.45, 1.30], // stúpa celé leto
+  huby:     [1.00, 1.15, 1.20, 1.10, 1.05, 0.95, 0.85], // závisí od vlahy
+  breza:    [1.00, 0.40, 0.15, 0.05, 0.02, 0.02, 0.02], // hotová
+  lieska:   [1.00, 0.50, 0.20, 0.10, 0.05, 0.05, 0.05], // hotová
+  ambrozia: [0.00, 0.00, 0.00, 0.00, 0.00, 0.05, 0.15], // začína až v júli
+};
+
+function wmoToEmoji(code) {
+  if (code === 0) return "☀️";
+  if (code <= 2)  return "🌤️";
+  if (code <= 3)  return "☁️";
+  if (code <= 48) return "🌫️";
+  if (code <= 67) return "🌧️";
+  if (code <= 77) return "🌨️";
+  if (code <= 82) return "🌦️";
+  return "⛈️";
+}
+
+// Výpočet počasieho faktora pre peľ
+// Váhy peľu podľa veľkosti zŕn — ovplyvňuje ako rýchlo dážď zmyje peľ
+// Ťažší peľ (borovica) klesá rýchlejšie, ľahký (trávy, ambrozia) zostáva dlhšie
+const POLLEN_RAIN_SENSITIVITY = {
+  borovica: 0.65, // ťažké zrná — dážď zmyje rýchlo
+  breza:    0.80,
+  lieska:   0.80,
+  travy:    1.00, // ľahké zrná — dážď nezmyje tak rýchlo
+  byliny:   1.00,
+  ambrozia: 1.10, // veľmi ľahké — drží sa dlho
+  huby:     0.90, // spóry — stredné
+};
+
+// Nadmorská výška miest — oneskorenie sezóny pre hornaté oblasti (+týždeň na 300m)
+const CITY_ALTITUDE_DELAY = {
+  "Bratislava": 0, "Trnava": 0, "Nitra": 0,
+  "Trenčín":    0.5, // 200m n.m.
+  "Žilina":     1.0, // 365m n.m. + horské okolie
+  "Banská Bystrica": 1.0, // 362m n.m.
+  "Prešov":     1.0, // 260m n.m. + Tatry v dosahu
+  "Košice":     0.5, // 208m n.m.
+};
+
+// Fenologický koeficient s korekciou na nadmorskú výšku
+function fenoCoeff(id, dayIndex, city) {
+  const delay = CITY_ALTITUDE_DELAY[city] || 0;
+  const fArr  = FENO[id];
+  if (!fArr) return 1.0;
+  // Posun indexu o delay — hornaté mestá sú o delay týždňov "pozadu"
+  const adjustedIdx = Math.max(0, dayIndex - Math.round(delay));
+  const i = Math.min(adjustedIdx, fArr.length - 1);
+  return fArr[i] ?? 1.0;
+}
+
+// Počet po sebe idúcich suchých dní pred daným dňom (akumulačný efekt)
+function dryStreakBefore(weatherDays, upToIndex) {
+  let streak = 0;
+  for (let i = upToIndex - 1; i >= 0; i--) {
+    if (weatherDays[i].rain < 0.5) streak++;
+    else break;
+  }
+  return streak;
+}
+
+function calcWeatherFactor(day, prevRain = 0, pollenId = null, dryStreak = 0) {
+  const { temp, rain, wind, clouds } = day;
+
+  // 1. TEPLOTA — nelineárna krivka (optimum 22-28°C)
+  const tF = temp < 5  ? 0.10 :
+             temp < 10 ? 0.40 :
+             temp < 15 ? 0.70 :
+             temp < 20 ? 0.90 :
+             temp < 24 ? 1.10 :
+             temp < 28 ? 1.30 : 1.40;
+
+  // 2. DÁŽĎ — upravený podľa hmotnosti peľu daného alergénu
+  const rainSens = (pollenId && POLLEN_RAIN_SENSITIVITY[pollenId]) || 1.0;
+  let rF = rain > 15 ? 0.08 * rainSens :
+           rain > 8  ? 0.18 * rainSens :
+           rain > 3  ? 0.42 * rainSens :
+           rain > 0.5? (0.65 + (1 - rainSens) * 0.20) : 1.00;
+  rF = Math.max(0.05, Math.min(rF, 1.0));
+
+  // Burst efekt deň po silnom daždi (peľ sa uvoľní po vlhkosti)
+  if (prevRain > 8 && rain < 0.5) {
+    const burstMult = pollenId === "borovica" ? 1.20 : 1.40; // borovica menej
+    rF = Math.min(rF * burstMult, 1.45);
+  }
+
+  // 3. VIETOR — optimum pre šírenie je 10-25 km/h
+  const wF = wind < 3  ? 0.75 :
+             wind < 10 ? 0.95 :
+             wind < 25 ? 1.20 :
+             wind < 40 ? 1.35 :
+             wind < 55 ? 1.15 : 0.90; // búrlivý vietor narúša kvety
+
+  // 4. OBLAČNOSŤ — pri zatvorených kvetoch menej peľu
+  const cF = 1.0 - (clouds / 100) * 0.22;
+
+  // 5. AKUMULAČNÝ EFEKT — suché dni hromadia peľ v ovzduší
+  // Po 3 suchých dňoch +15%, po 5 dňoch +25%, max +35%
+  const accumF = 1.0 + Math.min(dryStreak * 0.07, 0.35);
+
+  // Kombinovaný faktor — cap aby sme predišli nereálnym extrémom
+  // Faktory nie sú plne nezávislé, preto nepoužívame čisté násobenie
+  const rawCombined = tF * rF * wF * cF * accumF;
+
+  // Soft cap: nad 1.6 rast spomalíme (reálny peľ má fyzikálny strop)
+  const capped = rawCombined > 1.6
+    ? 1.6 + (rawCombined - 1.6) * 0.3
+    : rawCombined;
+
+  return Math.min(capped, 2.0); // absolútny max ×2.0 oproti baseline
+}
+
+// Hlavný dôvod pre daný deň — zobrazí sa ako text vo widgete
+function weatherDriver(day, prevRain) {
+  const { temp, rain, wind, clouds } = day;
+  // Zoraď faktory podľa sily vplyvu
+  if (rain > 15)                   return { text: `Silný dážď ${rain.toFixed(0)}mm — peľ ↓↓`, pos: false };
+  if (rain > 5)                    return { text: `Dážď ${rain.toFixed(0)}mm — peľ klesá ↓`, pos: false };
+  if (rain > 0.5)                  return { text: `Slabý dážď — peľ mierne ↓`, pos: false };
+  if (prevRain > 8 && rain < 0.5)  return { text: `Po daždi — výbuch peľu ↑`, pos: true };
+  if (temp > 30)                   return { text: `Veľmi horúco ${Math.round(temp)}°C — peľ ↑↑`, pos: true };
+  if (temp > 25)                   return { text: `Teplo ${Math.round(temp)}°C — ideálne pre peľ ↑`, pos: true };
+  if (temp < 8)                    return { text: `Chladno ${Math.round(temp)}°C — peľ ↓↓`, pos: false };
+  if (temp < 14)                   return { text: `Chladnejšie — peľ ↓`, pos: false };
+  if (wind > 40)                   return { text: `Búrlivý vietor — narúša kvety`, pos: null };
+  if (wind > 25)                   return { text: `Silný vietor — peľ sa šíri ↑`, pos: true };
+  if (wind > 12)                   return { text: `Vietor — dobré šírenie peľu`, pos: null };
+  if (clouds > 90)                 return { text: `Celozatažené — kvety zatvorené ↓`, pos: false };
+  if (clouds > 70)                 return { text: `Zamračené — menej peľu`, pos: false };
+  if (temp > 20 && clouds < 30)    return { text: `Slnečno a teplo — peľ ↑`, pos: true };
+  return { text: "Priemerné podmienky", pos: null };
+}
+
+async function fetchWeather(city) {
+  const [lat, lon] = CITY_COORDS[city] || [48.15, 17.11];
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
+    + `&daily=temperature_2m_max,precipitation_sum,windspeed_10m_max,cloudcover_mean,weathercode`
+    + `&hourly=temperature_2m,precipitation,windspeed_10m,cloudcover`
+    + `&forecast_days=7&timezone=Europe%2FBratislava`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Open-Meteo chyba");
+  const data = await res.json();
+  const d = data.daily;
+  const h = data.hourly;
+
+  // Parse hourly into per-day arrays (24h each)
+  const hourlyByDay = d.time.map((date, di) => {
+    return Array.from({length:24}, (_, hr) => {
+      const idx = di * 24 + hr;
+      return {
+        hour:   hr,
+        temp:   h.temperature_2m[idx]  ?? 18,
+        rain:   h.precipitation[idx]   ?? 0,
+        wind:   h.windspeed_10m[idx]   ?? 10,
+        clouds: h.cloudcover[idx]      ?? 40,
+      };
+    });
+  });
+
+  return d.time.map((date, i) => ({
+    date,
+    temp:       d.temperature_2m_max[i]  || 20,
+    rain:       d.precipitation_sum[i]   || 0,
+    wind:       d.windspeed_10m_max[i]   || 10,
+    clouds:     d.cloudcover_mean[i]     || 30,
+    wmo:        d.weathercode[i]         || 1,
+    emoji:      wmoToEmoji(d.weathercode[i] || 1),
+    hourly:     hourlyByDay[i] || [],
+  }));
+}
+
+// Základný hodinový profil peľového rizika (bez vplyvu počasia)
+// Modeluje prirodzené uvoľňovanie peľu počas dňa
+const BASE_HOURLY_POLLEN = [
+  0.05, 0.05, 0.05, 0.05, 0.08, 0.20, // 00-05: noc → svitanie
+  0.55, 0.85, 1.00, 0.95, 0.85, 0.75, // 06-11: ranný vrchol (rosa vysychá, kvety sa otvárajú)
+  0.70, 0.68, 0.62, 0.60, 0.55, 0.50, // 12-17: poobede — peľ sa rozptyľuje
+  0.38, 0.28, 0.20, 0.15, 0.10, 0.07, // 18-23: večer → peľ sedimentuje
+];
+
+function calcBestWorstTime(dayData) {
+  const hourly = dayData?.hourly;
+  if (!hourly || hourly.length < 24) {
+    // Fallback — žiadne hodinové dáta
+    return {
+      best:        "18:00–22:00",
+      worst:       "06:00–10:00",
+      bestReason:  "Peľ sedimentuje podvečer",
+      worstReason: "Ranné uvoľňovanie peľu",
+      fromHourly:  false,
+    };
+  }
+
+  // Vypočítaj hodinové riziko
+  const scores = hourly.map(h => {
+    const base = BASE_HOURLY_POLLEN[h.hour] ?? 0.5;
+
+    // Dážď — silný dážď = bezpečno, slabý = čiastočné zníženie
+    let rainMod = 1.0;
+    if (h.rain > 2.0)  rainMod = 0.05;
+    else if (h.rain > 0.8) rainMod = 0.25;
+    else if (h.rain > 0.2) rainMod = 0.55;
+
+    // Teplota — pod 8°C kvety zatvorené, nad 26°C peľ stúpa
+    const tempMod = h.temp < 6  ? 0.20 :
+                    h.temp < 10 ? 0.50 :
+                    h.temp < 16 ? 0.80 :
+                    h.temp < 22 ? 1.00 :
+                    h.temp < 27 ? 1.15 : 1.25;
+
+    // Vietor — 10-30 km/h šíri peľ, nad 45 narúša kvety
+    const windMod = h.wind < 5  ? 0.85 :
+                    h.wind < 15 ? 1.00 :
+                    h.wind < 30 ? 1.20 :
+                    h.wind < 45 ? 1.30 : 1.05;
+
+    // Oblačnosť — zatažené ráno = menej ranného peľu
+    const cloudMod = 1.0 - (h.clouds / 100) * 0.20;
+
+    return base * rainMod * tempMod * windMod * cloudMod;
+  });
+
+  // Nájdi najlepší a najhorší 2-hodinový blok (mimo noci 23:00-05:00)
+  const DAYTIME = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22];
+  const EVENING_SAFE = [18,19,20,21,22,23];
+
+  // Najhorší blok — kde je riziko najvyššie
+  let worstStart = 7, worstMax = -1;
+  for (const hr of DAYTIME) {
+    const avg = (scores[hr] + scores[Math.min(hr+1,23)] + scores[Math.min(hr+2,23)]) / 3;
+    if (avg > worstMax) { worstMax = avg; worstStart = hr; }
+  }
+
+  // Najlepší blok — kde je riziko najnižšie (priorita na večer/ráno počas dažďa)
+  let bestStart = 18, bestMin = 999;
+  for (const hr of DAYTIME) {
+    const avg = (scores[hr] + scores[Math.min(hr+1,23)] + scores[Math.min(hr+2,23)]) / 3;
+    if (avg < bestMin) { bestMin = avg; bestStart = hr; }
+  }
+
+  const fmt = h => `${h}:00`;
+  const worstEnd = Math.min(worstStart + 3, 23);
+  const bestEnd  = Math.min(bestStart  + 3, 23);
+
+  // Generuj vysvetlenie
+  const worstHour = hourly[worstStart];
+  const bestHour  = hourly[bestStart];
+
+  function worstReason(h, startHr) {
+    if (h.rain < 0.3 && h.temp > 22 && startHr >= 6 && startHr <= 10)
+      return "Ranné uvoľňovanie peľu + teplo";
+    if (h.rain < 0.3 && h.temp > 26)
+      return `Horúco ${Math.round(h.temp)}°C — peľ vo vrchole`;
+    if (h.wind > 25 && h.rain < 0.3)
+      return `Silný vietor ${Math.round(h.wind)} km/h šíri peľ`;
+    if (startHr >= 6 && startHr <= 10)
+      return "Ranné uvoľňovanie peľu";
+    if (startHr >= 11 && startHr <= 15)
+      return "Vrchol teplôt — peľ aktívny";
+    return "Najvyššia koncentrácia peľu";
+  }
+
+  function bestReason(h, startHr) {
+    if (h.rain > 1.0) return `Dážď ${h.rain.toFixed(1)}mm — peľ zmytý ↓`;
+    if (h.rain > 0.3) return "Zrážky — peľ klesá";
+    if (startHr >= 18) return "Peľ sedimentuje podvečer";
+    if (startHr >= 20) return "Nočný pokoj — minimum peľu";
+    if (h.temp < 12)  return `Chladno ${Math.round(h.temp)}°C — peľ neaktívny`;
+    if (h.clouds > 85) return "Zatažené — kvety zatvorené";
+    return "Najnižšia koncentrácia dňa";
+  }
+
+  return {
+    best:        `${fmt(bestStart)}–${fmt(bestEnd)}`,
+    worst:       `${fmt(worstStart)}–${fmt(worstEnd)}`,
+    bestReason:  bestReason(bestHour, bestStart),
+    worstReason: worstReason(worstHour, worstStart),
+    fromHourly:  true,
+    worstScore:  Math.round(worstMax * 100),
+    bestScore:   Math.round(bestMin * 100),
+  };
+}
+
+function calcHybrid(city, ids, sens, weatherDays) {
+  const cd = CITY_DATA[city] || {};
+  const sm = SENS_MULT[sens] || 1.0;
+
+  return ids.map(id => {
+    const b = POLLEN_DATA[id]; if (!b) return null;
+    const baseScore = cd[id] !== undefined ? cd[id] : b.skore;
+
+    // Ak je baseline 0 a alergén ešte nie je v sezóne → ostane 0
+    if (baseScore === 0 && !b.sezona) {
+      return {
+        id, emoji: b.emoji, label: b.short,
+        days: weatherDays.map(day => ({
+          score: 0, uroven: "Veľmi nízka",
+          driver: weatherDriver(day, 0),
+        })),
+      };
+    }
+
+    return {
+      id, emoji: b.emoji, label: b.short,
+      days: weatherDays.map((day, i) => {
+        const prevRain  = i > 0 ? weatherDays[i - 1].rain : 0;
+        const dryStreak = dryStreakBefore(weatherDays, i);
+
+        // P1: Fenológia s korekciou nadmorskej výšky
+        const feno = fenoCoeff(id, i, city);
+
+        // P2+P3: Počasie s peľ-špecifickým rain faktorom + akumulácia
+        const wf = calcWeatherFactor(day, prevRain, id, dryStreak);
+
+        // Výsledok
+        const raw   = baseScore * feno * wf * sm;
+        const score = Math.min(5, Math.max(0, Math.round(raw)));
+        const driver = weatherDriver(day, prevRain);
+
+        return { score, uroven: S2L[score] || "Veľmi nízka", driver };
+      }),
+    };
+  }).filter(Boolean);
+}
 const COL = { "Veľmi nízka":"#16a34a","Nízka":"#65a30d","Stredná":"#ca8a04","Vysoká":"#ea580c","Veľmi vysoká":"#dc2626" };
 const BG  = { "Veľmi nízka":"#f0fdf4","Nízka":"#f7fee7","Stredná":"#fefce8","Vysoká":"#fff7ed","Veľmi vysoká":"#fef2f2" };
 
@@ -230,19 +633,20 @@ function Dots({ score, color }) {
 }
 
 /* ══ ALMANACH PAGE ══ */
-function AlmanachPage() {
+function AlmanachPage({ T }) {
+  if (!T) T = LIGHT;
   const [selected, setSelected] = useState(null);
   const currentMonth = new Date().getMonth(); // 0-indexed
 
   return (
-    <div className="almanach-page" style={{ padding:"32px 36px", overflowX:"hidden" }}>
+    <div className="almanach-page" style={{ padding:"32px 36px", overflowX:"hidden", background:T.bg, minHeight:"100vh", transition:"background .3s" }}>
       {/* Header */}
       <div style={{ marginBottom:32 }}>
-        <div style={{ fontSize:13, color:"#9CA3AF", marginBottom:4 }}>Peľový sprievodca</div>
-        <h1 style={{ fontSize:22, fontWeight:700, color:"#111827", letterSpacing:"-.3px", marginBottom:8 }}>
+        <div style={{ fontSize:13, color:T.textFaint, marginBottom:4 }}>Peľový sprievodca</div>
+        <h1 style={{ fontSize:22, fontWeight:700, color:T.text, letterSpacing:"-.3px", marginBottom:8 }}>
           Peľový kalendár Slovenska
         </h1>
-        <p style={{ fontSize:14, color:"#6B7280", maxWidth:640, lineHeight:1.6 }}>
+        <p style={{ fontSize:14, color:T.textMuted, maxWidth:640, lineHeight:1.6 }}>
           Prehľad všetkých alergénov, ich sezóny kvitnutia a charakteristík. Aktuálny mesiac je zvýraznený.
         </p>
       </div>
@@ -269,7 +673,7 @@ function AlmanachPage() {
           <div key={kat}>
             {/* Category label */}
             <div className="cal-cat-label" style={{ display:"grid", gridTemplateColumns:"220px repeat(12,1fr)", background:"#F9FAFB", borderBottom:"1px solid #EAECF0", borderTop:"1px solid #EAECF0" }}>
-              <div style={{ padding:"6px 16px", fontSize:11, fontWeight:700, color:"#6B7280", textTransform:"uppercase", letterSpacing:1 }}>
+              <div style={{ padding:"6px 16px", fontSize:11, fontWeight:700, color:T.textMuted, textTransform:"uppercase", letterSpacing:1 }}>
                 {kat}
               </div>
               {MESIACE.map((_,i) => (
@@ -292,7 +696,7 @@ function AlmanachPage() {
                     <div style={{ padding:"12px 16px", display:"flex", alignItems:"center", gap:10 }}>
                       <span style={{ fontSize:18 }}>{p.emoji}</span>
                       <div style={{ flex:1 }}>
-                        <div style={{ fontSize:13, fontWeight:600, color:"#111827" }}>{p.label}</div>
+                        <div style={{ fontSize:13, fontWeight:600, color:T.text }}>{p.label}</div>
                         <div style={{ fontSize:11, color:"#9CA3AF", marginTop:1 }}>
                           {[0,1,2,3,4].map(i => (
                             <span key={i} style={{ color: i<p.intenzita ? p.farba : "#E5E7EB", marginRight:2, fontSize:8 }}>●</span>
@@ -316,7 +720,7 @@ function AlmanachPage() {
                     <div style={{ padding:"10px 12px", display:"flex", alignItems:"center", gap:10 }}>
                       <span style={{ fontSize:18 }}>{p.emoji}</span>
                       <div style={{ flex:1 }}>
-                        <div style={{ fontSize:13, fontWeight:600, color:"#111827" }}>{p.label}</div>
+                        <div style={{ fontSize:13, fontWeight:600, color:T.text }}>{p.label}</div>
                         <div style={{ fontSize:11, color:"#9CA3AF" }}>
                           {[0,1,2,3,4].map(i => (
                             <span key={i} style={{ color: i<p.intenzita ? p.farba : "#E5E7EB", marginRight:2, fontSize:8 }}>●</span>
@@ -396,7 +800,7 @@ function AlmanachPage() {
       </div>
 
       {/* Legend */}
-      <div className="legend-bar" style={{ display:"flex", alignItems:"center", gap:24, padding:"16px 20px", background:"#F9FAFB", borderRadius:10, fontSize:12, color:"#6B7280" }}>
+      <div className="legend-bar" style={{ display:"flex", alignItems:"center", gap:24, padding:"16px 20px", background:T.bg, borderRadius:10, fontSize:12, color:T.textMuted, border:`1px solid ${T.cardBorder}` }}>
         <span style={{ fontWeight:600, color:"#374151" }}>Legenda:</span>
         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
           <div style={{ width:32, height:10, borderRadius:5, background:"#16a34a", opacity:.9 }}/>
@@ -417,30 +821,31 @@ function AlmanachPage() {
 }
 
 /* ══ FORECAST PAGE ══ */
-function ForecastPage({ city, chosen, sens, forecast, setForecast }) {
+function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weatherLoading, T }) {
+  if (!T) T = LIGHT;
   const today = new Date().toLocaleDateString("sk-SK",{weekday:"long",year:"numeric",month:"long",day:"numeric"});
   const rc  = forecast ? (COL[forecast.riziko]||"#888") : "#3A7D44";
   const rbg = forecast ? (BG[forecast.riziko]||"#f9fafb") : "#f9fafb";
 
   return (
-    <div className="forecast-page" style={{ flex:1, padding:"32px 36px", overflowY:"auto", overflowX:"hidden" }}>
+    <div className="forecast-page" style={{ flex:1, padding:"32px 36px", overflowY:"auto", overflowX:"hidden", background:T.bg, transition:"background .3s" }}>
       {!forecast && (
         <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:"70vh", gap:16, opacity:.5 }}>
           <div style={{ fontSize:56 }}>🌿</div>
-          <div style={{ fontSize:16, fontWeight:500, color:"#6B7280" }}>Nastav profil a zobraz predpoveď</div>
-          <div style={{ fontSize:13, color:"#9CA3AF" }}>Vyber mesto, alergie a citlivosť v ľavom paneli</div>
+          <div style={{ fontSize:16, fontWeight:500, color:T.textMuted }}>Nastav profil a zobraz predpoveď</div>
+          <div style={{ fontSize:13, color:T.textFaint }}>Vyber mesto, alergie a citlivosť v ľavom paneli</div>
         </div>
       )}
       {forecast && (
         <div>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:28 }}>
             <div>
-              <div style={{ fontSize:13, color:"#9CA3AF", marginBottom:2 }}>{today}</div>
-              <h1 style={{ fontSize:22, fontWeight:700, color:"#111827", letterSpacing:"-.3px" }}>Peľová situácia · {city}</h1>
+              <div style={{ fontSize:13, color:T.textFaint, marginBottom:2 }}>{today}</div>
+              <h1 style={{ fontSize:22, fontWeight:700, color:T.text, letterSpacing:"-.3px" }}>Peľová situácia · {city}</h1>
             </div>
-            <button onClick={()=>setForecast(calcForecast(city,chosen,sens))} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", background:"#fff", border:"1.5px solid #E5E7EB", borderRadius:8, fontSize:13, fontWeight:500, color:"#374151", cursor:"pointer" }}
+            <button onClick={()=>setForecast(calcForecast(city,chosen,sens))} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", background:T.card, border:`1.5px solid ${T.cardBorder}`, borderRadius:8, fontSize:13, fontWeight:500, color:T.textSub, cursor:"pointer", transition:"all .2s" }}
               onMouseEnter={e=>e.currentTarget.style.borderColor="#3A7D44"}
-              onMouseLeave={e=>e.currentTarget.style.borderColor="#E5E7EB"}>
+              onMouseLeave={e=>{e.currentTarget.style.borderColor=T.cardBorder;}}>
               ↺ Obnoviť
             </button>
           </div>
@@ -455,68 +860,146 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast }) {
               )}
             </div>
             <div className="card" style={{ padding:24 }}>
-              <div className="lbl">Čas vonku</div>
-              <div style={{ display:"flex", flexDirection:"column", gap:12, marginTop:4 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                  <div style={{ width:32, height:32, background:"#ECFDF5", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16 }}>✅</div>
-                  <div>
-                    <div style={{ fontSize:11, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:.5 }}>Najlepší čas</div>
-                    <div style={{ fontSize:16, fontWeight:700, color:"#166534" }}>18:00–22:00</div>
-                  </div>
-                </div>
-                <div style={{ height:1, background:"#F3F4F6" }}/>
-                <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                  <div style={{ width:32, height:32, background:"#FEF2F2", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16 }}>⚠️</div>
-                  <div>
-                    <div style={{ fontSize:11, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:.5 }}>Najhorší čas</div>
-                    <div style={{ fontSize:16, fontWeight:700, color:"#DC2626" }}>06:00–10:00</div>
-                  </div>
-                </div>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:12 }}>
+                <div className="lbl" style={{ marginBottom:0 }}>Čas vonku</div>
+                {weather && weather[0]?.hourly?.length > 0 && (
+                  <div style={{ fontSize:10, color:T.textFaint }}>🕐 hodinový model</div>
+                )}
               </div>
+              {(() => {
+                const bw = calcBestWorstTime(weather?.[0]);
+                return (
+                  <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                    <div style={{ display:"flex", alignItems:"flex-start", gap:12 }}>
+                      <div style={{ width:32, height:32, minWidth:32, background:T.accentLight, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16 }}>✅</div>
+                      <div>
+                        <div style={{ fontSize:11, color:T.textFaint, textTransform:"uppercase", letterSpacing:.5 }}>Najlepší čas</div>
+                        <div style={{ fontSize:16, fontWeight:700, color:"#166534" }}>{bw.best}</div>
+                        <div style={{ fontSize:11, color:"#16a34a", marginTop:2 }}>{bw.bestReason}</div>
+                      </div>
+                    </div>
+                    <div style={{ height:1, background:T.divider }}/>
+                    <div style={{ display:"flex", alignItems:"flex-start", gap:12 }}>
+                      <div style={{ width:32, height:32, minWidth:32, background:"#FEF2F2", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16 }}>⚠️</div>
+                      <div>
+                        <div style={{ fontSize:11, color:T.textFaint, textTransform:"uppercase", letterSpacing:.5 }}>Najhorší čas</div>
+                        <div style={{ fontSize:16, fontWeight:700, color:"#DC2626" }}>{bw.worst}</div>
+                        <div style={{ fontSize:11, color:"#dc2626", marginTop:2 }}>{bw.worstReason}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
             <div className="card" style={{ padding:24 }}>
-              <div className="lbl">Výhľad 3 dni</div>
-              <div style={{ display:"flex", flexDirection:"column", gap:8, marginTop:4 }}>
-                {forecast.days.map((d,i) => {
-                  const dc = COL[d.riziko]||"#888";
-                  return (
-                    <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                      <span style={{ fontSize:13, color:"#6B7280", fontWeight:500, width:72 }}>{d.den}</span>
-                      <div style={{ flex:1, margin:"0 12px" }}>
-                        <div style={{ height:4, borderRadius:2, background:"#F3F4F6", overflow:"hidden" }}>
-                          <div style={{ height:"100%", width:`${(d.s/5)*100}%`, background:dc, borderRadius:2 }}/>
-                        </div>
+              <div className="lbl">Počasie a výhľad</div>
+              {weather && weather[0] ? (
+                <div style={{ display:"flex", flexDirection:"column", gap:10, marginTop:4 }}>
+                  {/* Today weather row */}
+                  <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                    <span style={{ fontSize:34 }}>{weather[0].emoji}</span>
+                    <div>
+                      <div style={{ fontSize:20, fontWeight:700, color:T.text }}>{Math.round(weather[0].temp)}°C</div>
+                      <div style={{ fontSize:12, color:T.textMuted, marginTop:1 }}>
+                        {weather[0].rain > 0.5 ? `💧 ${weather[0].rain.toFixed(0)}mm` : "Bez zrážok"}
+                        {weather[0].wind > 15 ? ` · 💨 ${Math.round(weather[0].wind)} km/h` : ""}
                       </div>
-                      <span style={{ fontSize:12, fontWeight:600, color:dc, width:82, textAlign:"right" }}>{d.riziko}</span>
                     </div>
-                  );
-                })}
-              </div>
+                    <div style={{ marginLeft:"auto", textAlign:"right" }}>
+                      {(() => { const drv = weatherDriver(weather[0], 0); return (
+                        <div style={{ fontSize:11.5, color: drv.pos===true?"#16a34a":drv.pos===false?"#dc2626":"#6B7280", fontWeight:600, lineHeight:1.4, maxWidth:100 }}>
+                          {drv.text}
+                        </div>
+                      ); })()}
+                    </div>
+                  </div>
+
+                  {/* Divider */}
+                  <div style={{ height:1, background:"#F3F4F6" }}/>
+
+                  {/* 3-day mini forecast */}
+                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                    {weather.slice(1, 4).map((day, i) => {
+                      const dayIdx = i + 1;
+                      const prevRain = weather[dayIdx - 1]?.rain || 0;
+                      // Compute max pollen score for this day from calcForecast outlook
+                      const outlookScore = forecast?.days?.[i]?.s || 0;
+                      const dc = COL[S2L[outlookScore]] || "#9CA3AF";
+                      const drv = weatherDriver(day, prevRain);
+                      const dayLabel = i === 0 ? "Zajtra" : i === 1 ? "Pozajtra" : "Za 3 dni";
+                      return (
+                        <div key={i} style={{ display:"flex", alignItems:"center", gap:8 }}>
+                          {/* Day + weather */}
+                          <div style={{ width:64, flexShrink:0 }}>
+                            <div style={{ fontSize:11, color:T.textFaint, fontWeight:600, textTransform:"uppercase", letterSpacing:.4 }}>{dayLabel}</div>
+                          </div>
+                          <span style={{ fontSize:16 }}>{day.emoji}</span>
+                          <div style={{ fontSize:12, fontWeight:600, color:T.text, width:36, flexShrink:0 }}>{Math.round(day.temp)}°</div>
+                          {day.rain > 0.5
+                            ? <div style={{ fontSize:10, color:"#3b82f6", width:30, flexShrink:0 }}>💧{day.rain.toFixed(0)}</div>
+                            : <div style={{ width:30, flexShrink:0 }}/>
+                          }
+                          {/* Pollen bar */}
+                          <div style={{ flex:1, height:6, borderRadius:3, background:"#F3F4F6", overflow:"hidden" }}>
+                            <div style={{ height:"100%", width:`${(outlookScore/5)*100}%`, background:dc, borderRadius:3, transition:"width .4s" }}/>
+                          </div>
+                          {/* Risk label */}
+                          <div style={{ fontSize:11, fontWeight:700, color:dc, width:70, textAlign:"right", flexShrink:0 }}>
+                            {S2L[outlookScore] || "—"}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontSize:10.5, color:T.textPlaceholder }}>Open-Meteo · {city}</div>
+                </div>
+              ) : (
+                <div style={{ display:"flex", flexDirection:"column", gap:8, marginTop:4 }}>
+                  {/* Fallback: static 3-day from calcForecast */}
+                  {(forecast?.days || []).map((d,i) => {
+                    const dc = COL[d.riziko]||"#888";
+                    return (
+                      <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                        <span style={{ fontSize:13, color:"#6B7280", fontWeight:500, width:72 }}>{d.den}</span>
+                        <div style={{ flex:1, margin:"0 12px" }}>
+                          <div style={{ height:4, borderRadius:2, background:"#F3F4F6", overflow:"hidden" }}>
+                            <div style={{ height:"100%", width:`${(d.s/5)*100}%`, background:dc, borderRadius:2 }}/>
+                          </div>
+                        </div>
+                        <span style={{ fontSize:12, fontWeight:600, color:dc, width:82, textAlign:"right" }}>{d.riziko}</span>
+                      </div>
+                    );
+                  })}
+                  <div style={{ fontSize:12, color:"#9CA3AF" }}>{weatherLoading ? "⏳ Načítavam počasie…" : "—"}</div>
+                </div>
+              )}
             </div>
           </div>
+
+          <WeatherForecastWidget city={city} chosen={chosen} sens={sens} weather={weather} loading={weatherLoading} T={T}/>
 
           <div className="main-grid" style={{ display:"grid", gridTemplateColumns:"1.2fr 1fr", gap:16, marginBottom:16 }}>
             <div className="card" style={{ padding:24 }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
                 <div className="lbl" style={{ marginBottom:0 }}>Tvoje alergény dnes</div>
-                <div style={{ fontSize:11, color:"#9CA3AF" }}>týždeň 21–22/2026</div>
+                <div style={{ fontSize:11, color:T.textFaint }}>týždeň 21–22/2026</div>
               </div>
               {forecast.allergens.map((a,i) => {
                 const col = COL[a.uroven]||"#888";
                 return (
-                  <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 0", borderBottom: i<forecast.allergens.length-1?"1px solid #F3F4F6":"none" }}>
+                  <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 0", borderBottom: i<forecast.allergens.length-1?`1px solid ${T.divider}`:"none" }}>
                     <div style={{ fontSize:20, width:28, textAlign:"center", flexShrink:0 }}>{a.emoji}</div>
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
-                        <span style={{ fontSize:14, fontWeight:600, color:"#111827" }}>{a.label}</span>
+                        <span style={{ fontSize:14, fontWeight:600, color:T.text }}>{a.label}</span>
                         {a.sezona && <span style={{ fontSize:10, fontWeight:600, color:col, background:`${col}18`, padding:"1px 6px", borderRadius:20 }}>SEZÓNA</span>}
                       </div>
-                      <div style={{ fontSize:12, color:"#6B7280", marginBottom:6 }}>{a.komentar}</div>
+                      <div style={{ fontSize:12, color:T.textMuted, marginBottom:6 }}>{a.komentar}</div>
                       <Dots score={a.s} color={col}/>
                     </div>
                     <div style={{ textAlign:"right", flexShrink:0 }}>
                       <div style={{ fontSize:13, fontWeight:700, color:col }}>{a.uroven}</div>
-                      <div style={{ fontSize:11, color:"#9CA3AF", marginTop:2 }}>{a.trend}</div>
+                      <div style={{ fontSize:11, color:T.textFaint, marginTop:2 }}>{a.trend}</div>
                       {a.pelZrn && a.pelZrn!=="zatiaľ 0" && <div style={{ fontSize:10, color:"#D1D5DB", marginTop:2 }}>{a.pelZrn}</div>}
                     </div>
                   </div>
@@ -529,13 +1012,13 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast }) {
                 {forecast.recs.map((r,i) => (
                   <div key={i} style={{ display:"flex", gap:12, alignItems:"flex-start" }}>
                     <div style={{ width:22, height:22, minWidth:22, background:"#F0FDF4", borderRadius:6, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:"#166534", marginTop:1 }}>{i+1}</div>
-                    <div style={{ fontSize:13.5, color:"#374151", lineHeight:1.6 }}>{r}</div>
+                    <div style={{ fontSize:13.5, color:T.textSub, lineHeight:1.6 }}>{r}</div>
                   </div>
                 ))}
               </div>
-              <div style={{ marginTop:20, padding:"12px 14px", background:"#F8F7FF", borderRadius:10, borderLeft:"3px solid #8B5CF6" }}>
-                <div style={{ fontSize:11, fontWeight:600, color:"#7C3AED", marginBottom:3, textTransform:"uppercase", letterSpacing:.5 }}>Vedeli ste?</div>
-                <div style={{ fontSize:12.5, color:"#5B21B6", lineHeight:1.5 }}>Peľová sezóna tráv je pre alergikov najnáročnejšia — trávy produkujú obrovské množstvo ľahkého peľu, ktorý sa šíri do vzdialenosti až 400 km.</div>
+              <div style={{ marginTop:20, padding:"12px 14px", background:T.tipBg, borderRadius:10, borderLeft:`3px solid ${T.tipBorder}` }}>
+                <div style={{ fontSize:11, fontWeight:600, color:T.tipBorder, marginBottom:3, textTransform:"uppercase", letterSpacing:.5 }}>Vedeli ste?</div>
+                <div style={{ fontSize:12.5, color:T.tipText, lineHeight:1.5 }}>Peľová sezóna tráv je pre alergikov najnáročnejšia — trávy produkujú obrovské množstvo ľahkého peľu, ktorý sa šíri do vzdialenosti až 400 km.</div>
               </div>
             </div>
           </div>
@@ -551,22 +1034,22 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast }) {
                   <span style={{ fontSize:18, flexShrink:0 }}>{p.emoji}</span>
                   <div>
                     <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
-                      <span style={{ fontSize:12, fontWeight:600, color:"#111827" }}>{p.label}</span>
+                      <span style={{ fontSize:12, fontWeight:600, color:T.text }}>{p.label}</span>
                       <span style={{ fontSize:11, fontWeight:700, color:p.color, background:`${p.color}18`, padding:"1px 6px", borderRadius:20 }}>{p.trend}</span>
                     </div>
-                    <div style={{ fontSize:12, color:"#6B7280", lineHeight:1.5 }}>{p.text}</div>
+                    <div style={{ fontSize:12, color:T.textMuted, lineHeight:1.5 }}>{p.text}</div>
                   </div>
                 </div>
               ))}
             </div>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", paddingTop:10, borderTop:"1px solid #F3F4F6" }}>
-              <div style={{ fontSize:11.5, color:"#9CA3AF", fontStyle:"italic" }}>⚠️ {PROGNOZA.poznamka}</div>
-              <div style={{ fontSize:11, color:"#D1D5DB", flexShrink:0, marginLeft:12 }}>{PROGNOZA.zdroj}</div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", paddingTop:10, borderTop:`1px solid ${T.divider}` }}>
+              <div style={{ fontSize:11.5, color:T.textFaint, fontStyle:"italic" }}>⚠️ {PROGNOZA.poznamka}</div>
+              <div style={{ fontSize:11, color:T.textPlaceholder, flexShrink:0, marginLeft:12 }}>{PROGNOZA.zdroj}</div>
             </div>
           </div>
 
           <div style={{ marginTop:16, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <div style={{ fontSize:11, color:"#D1D5DB" }}>Zdroj: ÚVZ SR</div>
+            <div style={{ fontSize:11, color:"#D1D5DB" }}>Zdroj: ÚVZ SR · Stanice: RÚVZ BB, NR, KE, TT, ZA · ÚVZ SR BA</div>
             <button onClick={()=>setForecast(null)} style={{ fontSize:12, color:"#9CA3AF", background:"none", border:"none", cursor:"pointer", textDecoration:"underline" }}>Resetovať</button>
           </div>
         </div>
@@ -576,16 +1059,25 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast }) {
 }
 
 /* ══ SIDEBAR (shared) ══ */
-function Sidebar({ page, setPage, city, setCity, chosen, toggle, sens, setSens, go }) {
+function Sidebar({ page, setPage, city, setCity, chosen, toggle, sens, setSens, go, T, dark, setDark }) {
   return (
-    <aside style={{ width:280, minWidth:280, background:"#fff", borderRight:"1px solid #EAECF0", height:"100vh", position:"sticky", top:0, overflowY:"auto", display:"flex", flexDirection:"column" }} className="sidebar-inner">
+    <aside style={{ width:280, minWidth:280, background:T.sidebar, borderRight:`1px solid ${T.sidebarBorder}`, height:"100vh", position:"sticky", top:0, overflowY:"auto", display:"flex", flexDirection:"column", transition:"background .3s" }} className="sidebar-inner">
       {/* Logo */}
-      <div style={{ padding:"24px 20px 16px", borderBottom:"1px solid #EAECF0" }}>
+      <div style={{ padding:"24px 20px 16px", borderBottom:`1px solid ${T.sidebarBorder}` }}>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2 }}>
           <span style={{ fontSize:20 }}>🌿</span>
-          <span style={{ fontSize:19, fontWeight:700, color:"#1a3622", letterSpacing:"-.3px" }}>Alergio</span>
+          <span style={{ fontSize:19, fontWeight:700, color:T.accent, letterSpacing:"-.3px" }}>Alergio</span>
         </div>
-        <div style={{ fontSize:11.5, color:"#9CA3AF" }}>Peľová predpoveď pre Slovensko</div>
+        <div style={{ fontSize:11.5, color:T.textFaint }}>Peľová predpoveď pre Slovensko</div>
+        <button onClick={()=>setDark(d=>!d)} style={{
+          marginTop:10, display:"flex", alignItems:"center", gap:7, padding:"5px 10px",
+          background:T.toggleBg, border:`1px solid ${T.cardBorder}`, borderRadius:20,
+          fontSize:12, fontWeight:500, color:T.textMuted, cursor:"pointer",
+          fontFamily:"'Inter',sans-serif", transition:"all .2s",
+        }}>
+          <span>{T.toggleIcon}</span>
+          <span>{dark ? "Svetlý režim" : "Tmavý režim"}</span>
+        </button>
       </div>
 
       {/* Nav */}
@@ -611,28 +1103,28 @@ function Sidebar({ page, setPage, city, setCity, chosen, toggle, sens, setSens, 
       {/* Settings (only for forecast) */}
       {page === "forecast" && (
         <div style={{ padding:"16px 20px", flex:1 }}>
-          <div style={{ height:1, background:"#F3F4F6", marginBottom:16 }}/>
+          <div style={{ height:1, background:T.divider, marginBottom:16 }}/>
           <div style={{ marginBottom:18 }}>
-            <span style={{ fontSize:11, fontWeight:600, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:.8, display:"block", marginBottom:7 }}>Mesto</span>
-            <select style={{ width:"100%", padding:"8px 12px", border:"1.5px solid #E5E7EB", borderRadius:9, fontSize:13.5, fontFamily:"'Inter',sans-serif", color:"#374151", background:"#fff", outline:"none", appearance:"none", WebkitAppearance:"none", backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236B7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E\")", backgroundRepeat:"no-repeat", backgroundPosition:"right 10px center", paddingRight:28 }} value={city} onChange={e=>setCity(e.target.value)}>
+            <span style={{ fontSize:11, fontWeight:600, color:T.lbl, textTransform:"uppercase", letterSpacing:.8, display:"block", marginBottom:7 }}>Mesto</span>
+            <select style={{ width:"100%", padding:"8px 12px", border:`1.5px solid ${T.inputBorder}`, borderRadius:9, fontSize:13.5, fontFamily:"'Inter',sans-serif", color:T.text, background:T.input, outline:"none", appearance:"none", WebkitAppearance:"none", backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236B7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E\")", backgroundRepeat:"no-repeat", backgroundPosition:"right 10px center", paddingRight:28 }} value={city} onChange={e=>setCity(e.target.value)}>
               {CITIES.map(c=><option key={c}>{c}</option>)}
             </select>
           </div>
           <div style={{ marginBottom:18 }}>
-            <span style={{ fontSize:11, fontWeight:600, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:.8, display:"block", marginBottom:7 }}>Moje alergie</span>
+            <span style={{ fontSize:11, fontWeight:600, color:T.lbl, textTransform:"uppercase", letterSpacing:.8, display:"block", marginBottom:7 }}>Moje alergie</span>
             <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
               {Object.entries(POLLEN_DATA).map(([id,d]) => (
-                <button key={id} onClick={()=>toggle(id)} style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"5px 10px", border:`1.5px solid ${chosen.includes(id)?"#3A7D44":"#E5E7EB"}`, borderRadius:100, fontSize:12, fontWeight: chosen.includes(id)?600:400, color: chosen.includes(id)?"#166534":"#6B7280", cursor:"pointer", background: chosen.includes(id)?"#ECFDF5":"#fff", transition:"all .15s" }}>
+                <button key={id} onClick={()=>toggle(id)} style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"5px 10px", border:`1.5px solid ${chosen.includes(id)?"#3A7D44":T.chipBorder}`, borderRadius:100, fontSize:12, fontWeight: chosen.includes(id)?600:400, color: chosen.includes(id)?"#166534":T.textMuted, cursor:"pointer", background: chosen.includes(id)?T.accentLight:T.chipBg, transition:"all .15s" }}>
                   {d.emoji} {d.short}
                 </button>
               ))}
             </div>
           </div>
           <div style={{ marginBottom:20 }}>
-            <span style={{ fontSize:11, fontWeight:600, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:.8, display:"block", marginBottom:7 }}>Citlivosť</span>
+            <span style={{ fontSize:11, fontWeight:600, color:T.lbl, textTransform:"uppercase", letterSpacing:.8, display:"block", marginBottom:7 }}>Citlivosť</span>
             <div style={{ display:"flex", gap:5 }}>
               {[["nízka","Nízka"],["stredná","Stredná"],["vysoká","Vysoká"]].map(([v,l])=>(
-                <button key={v} onClick={()=>setSens(v)} style={{ flex:1, padding:"7px 4px", border:`1.5px solid ${sens===v?"#3A7D44":"#E5E7EB"}`, borderRadius:7, fontSize:12, fontWeight: sens===v?600:400, fontFamily:"'Inter',sans-serif", cursor:"pointer", background: sens===v?"#ECFDF5":"#fff", color: sens===v?"#166534":"#6B7280", transition:"all .15s" }}>{l}</button>
+                <button key={v} onClick={()=>setSens(v)} style={{ flex:1, padding:"7px 4px", border:`1.5px solid ${sens===v?"#3A7D44":T.inputBorder}`, borderRadius:7, fontSize:12, fontWeight: sens===v?600:400, fontFamily:"'Inter',sans-serif", cursor:"pointer", background: sens===v?T.accentLight:T.input, color: sens===v?"#166534":T.textMuted, transition:"all .15s" }}>{l}</button>
               ))}
             </div>
           </div>
@@ -644,8 +1136,8 @@ function Sidebar({ page, setPage, city, setCity, chosen, toggle, sens, setSens, 
 
       {page === "almanach" && (
         <div style={{ padding:"16px 20px", flex:1 }}>
-          <div style={{ height:1, background:"#F3F4F6", marginBottom:16 }}/>
-          <div style={{ fontSize:12.5, color:"#6B7280", lineHeight:1.7 }}>
+          <div style={{ height:1, background:T.divider, marginBottom:16 }}/>
+          <div style={{ fontSize:12.5, color:T.textMuted, lineHeight:1.7 }}>
             Prehľad sezón kvitnutia všetkých alergénov na Slovensku.<br/><br/>
             Klikni na riadok pre rozbalenie detailu.
           </div>
@@ -653,13 +1145,110 @@ function Sidebar({ page, setPage, city, setCity, chosen, toggle, sens, setSens, 
       )}
 
       {/* Footer */}
-      <div style={{ padding:"14px 20px", borderTop:"1px solid #EAECF0" }}>
-        <div style={{ fontSize:11, color:"#D1D5DB", lineHeight:1.6 }}>
+      <div style={{ padding:"14px 20px", borderTop:`1px solid ${T.sidebarBorder}` }}>
+        <div style={{ fontSize:11, color:T.textPlaceholder, lineHeight:1.6 }}>
           Dáta: ÚVZ SR<br/>
           21. týždeň 2026 · 27.5.2026
         </div>
       </div>
     </aside>
+  );
+}
+
+const SK_DAYS = ["Nedeľa","Pondelok","Utorok","Streda","Štvrtok","Piatok","Sobota"];
+
+function WeatherForecastWidget({ city, chosen, sens, weather, loading, T }) {
+  if (!T) T = LIGHT;
+  if (loading) return (
+    <div className="card" style={{ padding:24, textAlign:"center", marginBottom:16 }}>
+      <div style={{ fontSize:13, color:T.textFaint }}>⏳ Sťahujem predpoveď počasia z Open-Meteo…</div>
+    </div>
+  );
+  if (!weather || !weather.length) return null;
+  const hybrid = calcHybrid(city, chosen, sens, weather);
+  return (
+    <div className="card" style={{ padding:24, marginBottom:16 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:16 }}>
+        <div className="lbl" style={{ marginBottom:0 }}>7-dňová predpoveď peľu</div>
+        <div style={{ fontSize:11, color:"#9CA3AF" }}>ÚVZ SR × fenológia × počasie</div>
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6, marginBottom:14 }}>
+        {weather.map((day, i) => {
+          const scores = hybrid.map(h => h.days[i]?.score || 0);
+          const maxScore = Math.max(...scores, 0);
+          const rc = COL[S2L[maxScore]] || "#9CA3AF";
+          const rb = BG[S2L[maxScore]]  || "#F9FAFB";
+          const dayName = i === 0 ? "Dnes" : i === 1 ? "Zajtra" : SK_DAYS[new Date(day.date).getDay()];
+          const prevRain = i > 0 ? weather[i-1].rain : 0;
+          const drv = weatherDriver(day, prevRain);
+          return (
+            <div key={i} style={{ background:rb, border:`1px solid ${rc}25`, borderRadius:12, padding:"10px 6px", textAlign:"center", display:"flex", flexDirection:"column", gap:3 }}>
+              <div style={{ fontSize:10, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:.5, fontWeight:600 }}>{dayName}</div>
+              <div style={{ fontSize:22, lineHeight:1.2 }}>{day.emoji}</div>
+              <div style={{ fontSize:12, fontWeight:700, color:T.text }}>{Math.round(day.temp)}°C</div>
+              {day.rain > 0.5
+                ? <div style={{ fontSize:10, color:"#3b82f6", fontWeight:600 }}>💧{day.rain.toFixed(0)}mm</div>
+                : <div style={{ fontSize:10, color:"#D1D5DB" }}>—</div>
+              }
+              <div style={{ height:1, background:"#F3F4F6", margin:"3px 0" }}/>
+              {hybrid.map(h => {
+                const ds = h.days[i];
+                const col = COL[ds.uroven] || "#E5E7EB";
+                return (
+                  <div key={h.id} style={{ display:"flex", alignItems:"center", gap:3 }}>
+                    <span style={{ fontSize:10, minWidth:14 }}>{h.emoji}</span>
+                    <div style={{ flex:1, height:5, borderRadius:3, background:"#F3F4F6", overflow:"hidden" }}>
+                      <div style={{ height:"100%", width:`${(ds.score/5)*100}%`, background:col, borderRadius:3 }}/>
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{ height:1, background:"#F3F4F6", margin:"3px 0" }}/>
+              <div style={{ fontSize:9, lineHeight:1.35, color: drv.pos===true?"#16a34a":drv.pos===false?"#dc2626":"#6B7280", fontWeight: drv.pos!==null?600:400 }}>
+                {drv.text}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display:"flex", gap:16, flexWrap:"wrap", padding:"10px 14px", background:T.infoRow, borderRadius:8, fontSize:11.5, color:T.textMuted }}>
+        <span>🔬 <strong>Model:</strong></span>
+        <span>📡 Merania ÚVZ SR</span>
+        <span>× 🌿 Fenológia sezóny</span>
+        <span>× 🌤️ Počasie Open-Meteo</span>
+      </div>
+    </div>
+  );
+}
+
+function DynamicStyles({ T }) {
+  return (
+    <style>{`
+      .card {
+        background: ${T.card} !important;
+        border: 1px solid ${T.cardBorder} !important;
+        box-shadow: 0 2px 18px rgba(0,0,0,${T === DARK ? ".25" : ".07"}) !important;
+        transition: background .3s, border .3s !important;
+      }
+      .lbl { color: ${T.lbl} !important; }
+      body { background: ${T.bg}; transition: background .3s; }
+
+      /* Mobile nav */
+      .mobile-nav { background: ${T.navBg} !important; border-top: 1px solid ${T.navBorder} !important; }
+      .mobile-nav-btn { color: ${T.textFaint} !important; }
+      .mobile-nav-btn.on { color: ${T.accentText} !important; }
+      .mobile-back { background: ${T.card} !important; border-bottom: 1px solid ${T.cardBorder} !important; }
+
+      /* Scrollbar */
+      ::-webkit-scrollbar-thumb { background: ${T.cardBorder}; }
+
+      /* Calendar */
+      .cal-header { background: ${T.card}; }
+      .cal-cat-label { background: ${T.bg} !important; }
+
+      /* Select in sidebar */
+      select { background: ${T.input} !important; color: ${T.text} !important; border-color: ${T.inputBorder} !important; }
+    `}</style>
   );
 }
 
@@ -670,28 +1259,52 @@ export default function App() {
   const [chosen,  setChosen]  = useState(["travy","borovica"]);
   const [sens,    setSens]    = useState("stredná");
   const [forecast,setForecast]= useState(null);
+  const [weather, setWeather] = useState(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [dark,    setDark]    = useState(false);
+  const T = dark ? DARK : LIGHT;
 
   const toggle = id => setChosen(p => p.includes(id) ? p.filter(x=>x!==id) : [...p,id]);
-  const go = () => { if (chosen.length) setForecast(calcForecast(city, chosen, sens)); };
 
-  // Auto-refresh when city/allergens/sensitivity change — but only if forecast is already shown
+  const go = async () => {
+    if (!chosen.length) return;
+    setForecast(calcForecast(city, chosen, sens));
+    setWeatherLoading(true);
+    try {
+      const w = await fetchWeather(city);
+      setWeather(w);
+    } catch(e) { console.warn("Počasie nedostupné:", e); }
+    finally { setWeatherLoading(false); }
+  };
+
+  // Auto-refresh forecast when settings change
   useEffect(() => {
     if (forecast && chosen.length) setForecast(calcForecast(city, chosen, sens));
   }, [city, chosen, sens]);
+
+  // Re-fetch weather when city changes (if forecast already shown)
+  useEffect(() => {
+    if (!forecast) return;
+    setWeatherLoading(true);
+    fetchWeather(city)
+      .then(w => setWeather(w))
+      .catch(e => console.warn("Počasie nedostupné:", e))
+      .finally(() => setWeatherLoading(false));
+  }, [city]);
 
   // On mobile: show results screen OR setup screen (not both)
   // isMobileResult = mobile + forecast exists + on forecast page
   const showMobileResults = forecast && page === "forecast";
 
   return (
-    <div style={{ minHeight:"100vh", background:"#F8FAF8", fontFamily:"'Inter',system-ui,sans-serif" }}>
+    <div style={{ minHeight:"100vh", background:T.bg, fontFamily:"'Inter',system-ui,sans-serif", transition:"background .3s" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
         @keyframes fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
         ::-webkit-scrollbar { width:4px; } ::-webkit-scrollbar-track { background:transparent; } ::-webkit-scrollbar-thumb { background:#D1D5DB; border-radius:2px; }
-        .card { background:#fff; border-radius:14px; border:1px solid #EAECF0; }
-        .lbl { font-size:11px; font-weight:600; color:#9CA3AF; text-transform:uppercase; letter-spacing:.8px; display:block; margin-bottom:8px; }
+        .card { border-radius:14px; }
+        .lbl { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.8px; display:block; margin-bottom:8px; }
 
         /* ── DESKTOP ── */
         .layout { display:flex; max-width:1440px; margin:0 auto; min-height:100vh; }
@@ -772,11 +1385,12 @@ export default function App() {
         }
       `}</style>
 
+      <DynamicStyles T={T}/>
       <div className="layout">
 
         {/* Sidebar — hidden on mobile when showing results */}
         <div className={`sidebar-el${showMobileResults ? " hidden-mobile" : ""}`}>
-          <Sidebar page={page} setPage={setPage} city={city} setCity={setCity} chosen={chosen} toggle={toggle} sens={sens} setSens={setSens} go={go}/>
+          <Sidebar page={page} setPage={setPage} city={city} setCity={setCity} chosen={chosen} toggle={toggle} sens={sens} setSens={setSens} go={go} T={T} dark={dark} setDark={setDark}/>
         </div>
 
         {/* Main content */}
@@ -786,7 +1400,7 @@ export default function App() {
           {/* Mobile back bar — only visible on mobile when showing results */}
           {page === "forecast" && forecast && (
             <div className="mobile-back">
-              <button onClick={()=>setForecast(null)} style={{ display:"flex", alignItems:"center", gap:8, background:"none", border:"none", cursor:"pointer", fontSize:14, fontWeight:600, color:"#166534", fontFamily:"'Inter',sans-serif" }}>
+              <button onClick={()=>setForecast(null)} style={{ display:"flex", alignItems:"center", gap:8, background:"none", border:"none", cursor:"pointer", fontSize:14, fontWeight:600, color:T.accentText, fontFamily:"'Inter',sans-serif" }}>
                 ← Zmeniť nastavenia
               </button>
               <button onClick={()=>setForecast(calcForecast(city,chosen,sens))} style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 12px", background:"#F0FDF4", border:"1px solid #86efac", borderRadius:8, fontSize:13, fontWeight:500, color:"#166534", cursor:"pointer", fontFamily:"'Inter',sans-serif" }}>
@@ -795,8 +1409,8 @@ export default function App() {
             </div>
           )}
 
-          {page === "forecast" && <ForecastPage city={city} chosen={chosen} sens={sens} forecast={forecast} setForecast={setForecast}/>}
-          {page === "almanach" && <AlmanachPage/>}
+          {page === "forecast" && <ForecastPage city={city} chosen={chosen} sens={sens} forecast={forecast} setForecast={setForecast} weather={weather} weatherLoading={weatherLoading} T={T}/>}
+          {page === "almanach" && <AlmanachPage T={T}/>}
         </main>
       </div>
 
