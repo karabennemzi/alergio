@@ -62,11 +62,11 @@ const DARK = {
 
 /* ══════════════════════════════════════════════════════════════
    DÁTA — ÚVZ SR / pelovespravodajstvo.sk
-   21. týždeň 2026
+   22. týždeň 2026
    ══════════════════════════════════════════════════════════════ */
 const POLLEN_DATA = {
-  borovica: { label: "Borovica / Ihličnany", short: "Borovica", emoji: "🌲", uroven: "Veľmi vysoká", skore: 5, sezona: true, pelZrn: "2 373 zŕn/m³ (Žilina) · 656 zŕn/m³ (Nitra)", trend: "↘ klesá", komentar: "Dominantný alergén týždňa — viditeľné žlté povlaky na autách a terasách. Ihličnany dokvitajú.", outlook: [4,3,2] },
-  travy:    { label: "Trávy (lipnicovité)",  short: "Trávy",    emoji: "🌾", uroven: "Stredná",     skore: 3, sezona: true, pelZrn: "rastúce koncentrácie", trend: "↗ rastie", komentar: "Sezóna práve začína — trávy sa stanú dominantným alergénom na najbližšie 2 mesiace.", outlook: [4,4,5] },
+  borovica: { label: "Borovica / Ihličnany", short: "Borovica", emoji: "🌲", uroven: "Veľmi vysoká", skore: 5, sezona: true, pelZrn: "687 zŕn/m³ (Žilina) · 275 zŕn/m³ (Nitra)", trend: "↘ klesá", komentar: "Dominantný alergén týždňa — viditeľné žlté povlaky na autách a terasách. Ihličnany dokvitajú.", outlook: [4,3,2] },
+  travy:    { label: "Trávy (lipnicovité)",  short: "Trávy",    emoji: "🌾", uroven: "Stredná",     skore: 3, sezona: true, pelZrn: "55 zŕn/m³ (Žilina) · 45 zŕn/m³ (Nitra)", trend: "↗ rastie", komentar: "Sezóna práve začína — trávy sa stanú dominantným alergénom na najbližšie 2 mesiace.", outlook: [4,4,5] },
   breza:    { label: "Breza",                short: "Breza",    emoji: "🌳", uroven: "Veľmi nízka", skore: 1, sezona: false, pelZrn: "nízke koncentrácie", trend: "↘ klesá", komentar: "Sezóna brezy sa končí, koncentrácie sú nízke.", outlook: [1,1,1] },
   lieska:   { label: "Lieska",               short: "Lieska",   emoji: "🌰", uroven: "Veľmi nízka", skore: 1, sezona: false, pelZrn: "stopové množstvá", trend: "— ukončená", komentar: "Sezóna liesky je dávno ukončená.", outlook: [1,1,1] },
   ambrozia: { label: "Ambrózia",             short: "Ambrózia", emoji: "🌿", uroven: "Veľmi nízka", skore: 1, sezona: false, pelZrn: "zatiaľ 0", trend: "— nezačala", komentar: "Ambrózia začína až v júli–auguste. Zatiaľ nie je v ovzduší.", outlook: [1,1,1] },
@@ -202,31 +202,31 @@ const MESIACE = ["Jan","Feb","Mar","Apr","Máj","Jún","Júl","Aug","Sep","Okt",
 const KATEGORIE = ["Stromy","Byliny a trávy","Spóry"];
 
 const CITIES = ["Bratislava","Košice","Prešov","Žilina","Banská Bystrica","Nitra","Trnava","Trenčín"];
-// Reálne namerané dáta — pelovespravodajstvo.sk · 21. týždeň 2026
+// Reálne dáta — pelovespravodajstvo.sk (k=1 merané) + ÚVZ SR text · 22. týždeň 2026
 const CITY_DATA = {
-  "Bratislava":      { borovica:4, travy:2, huby:5, breza:1, byliny:2, pelBor:"68 zŕn/m³",  pelTra:"16 zŕn/m³",  pelHub:"306 zŕn/m³" },
-  "Trnava":          { borovica:4, travy:2, huby:5, breza:1, byliny:2, pelBor:"68 zŕn/m³",  pelTra:"16 zŕn/m³",  pelHub:"306 zŕn/m³" },
-  "Trenčín":         { borovica:5, travy:2, huby:5, breza:1, byliny:2, pelBor:"157 zŕn/m³", pelTra:"16 zŕn/m³",  pelHub:"896 zŕn/m³" },
-  "Nitra":           { borovica:5, travy:2, huby:5, breza:1, byliny:2, pelBor:"308 zŕn/m³", pelTra:"30 zŕn/m³",  pelHub:"732 zŕn/m³" },
-  "Žilina":          { borovica:5, travy:2, huby:5, breza:2, byliny:1, pelBor:"972 zŕn/m³", pelTra:"21 zŕn/m³",  pelHub:"880 zŕn/m³" },
-  "Banská Bystrica": { borovica:5, travy:3, huby:4, breza:2, byliny:1, pelBor:"252 zŕn/m³", pelTra:"33 zŕn/m³",  pelHub:"91 zŕn/m³"  },
-  "Prešov":          { borovica:5, travy:3, huby:4, breza:2, byliny:1, pelBor:"252 zŕn/m³", pelTra:"33 zŕn/m³",  pelHub:"91 zŕn/m³"  },
-  "Košice":          { borovica:5, travy:3, huby:4, breza:2, byliny:1, pelBor:"252 zŕn/m³", pelTra:"33 zŕn/m³",  pelHub:"91 zŕn/m³"  },
+  "Bratislava":      { borovica:3, travy:2, huby:5, breza:1, byliny:2, pelBor:"48 zŕn/m³",  pelTra:"25 zŕn/m³",  pelHub:"153 zŕn/m³" }, // k=1 merané
+  "Trnava":          { borovica:3, travy:2, huby:5, breza:1, byliny:2, pelBor:"48 zŕn/m³",  pelTra:"25 zŕn/m³",  pelHub:"153 zŕn/m³" }, // k=1 odhadnuté
+  "Trenčín":         { borovica:4, travy:2, huby:5, breza:1, byliny:2, pelBor:"110 zŕn/m³", pelTra:"25 zŕn/m³",  pelHub:"800 zŕn/m³" }, // z textu ÚVZ SR
+  "Nitra":           { borovica:5, travy:3, huby:5, breza:1, byliny:2, pelBor:"200 zŕn/m³", pelTra:"45 zŕn/m³",  pelHub:"680 zŕn/m³" }, // z textu (peak 275)
+  "Žilina":          { borovica:5, travy:4, huby:5, breza:2, byliny:2, pelBor:"420 zŕn/m³", pelTra:"55 zŕn/m³",  pelHub:"900 zŕn/m³" }, // z textu (peak 687)
+  "Banská Bystrica": { borovica:5, travy:3, huby:4, breza:2, byliny:2, pelBor:"165 zŕn/m³", pelTra:"38 zŕn/m³",  pelHub:"120 zŕn/m³" }, // z textu ÚVZ SR
+  "Prešov":          { borovica:5, travy:3, huby:4, breza:2, byliny:2, pelBor:"165 zŕn/m³", pelTra:"38 zŕn/m³",  pelHub:"120 zŕn/m³" }, // z textu ÚVZ SR
+  "Košice":          { borovica:5, travy:3, huby:4, breza:2, byliny:2, pelBor:"165 zŕn/m³", pelTra:"38 zŕn/m³",  pelHub:"120 zŕn/m³" }, // z textu ÚVZ SR
 };
 
 // Prognóza na 22. týždeň 2026 — pelovespravodajstvo.sk / RÚVZ BB
 const PROGNOZA = {
-  tyzden: "22. týždeň 2026",
-  datum: "od 2.6.2026",
+  tyzden: "23. týždeň 2026",
+  datum: "od 9.6.2026",
   items: [
-    { emoji:"🌲", label:"Borovica / Ihličnany", trend:"↘ klesá",  text:"Ihličnany postupne dokvitajú. Koncentrácie borovicových ihličnanov budú klesať.", color:"#2e7d32" },
-    { emoji:"🌾", label:"Trávy (lipnicovité)",  trend:"↗ stúpa",  text:"Trávy budú nadobúdať vysoké koncentrácie a stanú sa najsilnejším alergénom na najbližšie dva mesiace.", color:"#ea580c" },
-    { emoji:"🌱", label:"Byliny",               trend:"↗ stúpa",  text:"Na celom území stúpnu hladiny pŕhľavovitých, štiavu a skorocelu.", color:"#65a30d" },
-    { emoji:"🍄", label:"Spóry húb",            trend:"↗ stúpa",  text:"Koncentrácie spór húb (Cladospórium) budú stúpať počas teplejších dní.", color:"#7c3aed" },
-    { emoji:"🌳", label:"Stromy (dub, buk…)",   trend:"↘ klesá",  text:"Peľ ostatných drevín (dub, buk, orech) zostáva na nízkej úrovni.", color:"#6b7280" },
+    { emoji:"🌾", label:"Trávy (lipnicovité)",       trend:"↗ dominantné", text:"Peľová sezóna tráv pokračuje — dominantný alergén. Ovplyvní ju búrková činnosť.", color:"#ea580c" },
+    { emoji:"🌱", label:"Byliny (skorocel, pŕhľava)", trend:"↗ stúpa",     text:"Pribúda peľ bylín — najmä skorocelu a pŕhľavovitých. Rastúci trend celé leto.", color:"#65a30d" },
+    { emoji:"🌲", label:"Borovica / Ihličnany",       trend:"↘ klesá",     text:"Dreviny s vysokou produkciou peľu pomaly dokvitajú. Borovica na ústupe.", color:"#2e7d32" },
+    { emoji:"🌸", label:"Lipa, agát, gaštan",         trend:"↗ nastupuje", text:"V ovzduší sa bude vyskytovať peľ agátu, bazy, gaštanu a lipy.", color:"#d97706" },
+    { emoji:"🍄", label:"Spóry húb",                  trend:"↗ stúpa",     text:"Denné koncentrácie spór húb (Cladospórium) počas teplejších dní stúpnu.", color:"#7c3aed" },
   ],
-  poznamka: "Vplyvom počasia môžu byť regionálne rozdiely v kvantite peľu a spór v ovzduší.",
-  zdroj: "ÚVZ SR",
+  poznamka: "Búrková činnosť spôsobí regionálne rozdiely. Množstvo peľu bude lokálne ovplyvňované zrážkovou aktivitou.",
+  zdroj: "ÚVZ SR · 22. týždeň 2026",
 };
 
 // Citlivosť ovplyvňuje prah príznakov, nie koncentráciu peľu
@@ -258,15 +258,15 @@ const CITY_COORDS = {
 
 // Fenologické trendy — týždenné multiplikátory od 21. týždňa
 // Vychádza z historických pozorovaní SR (ÚVZ SR + ČHMÚ referenčné dáta)
-const FENO_BASE_WEEK = 21;
+const FENO_BASE_WEEK = 22;
 const FENO = {
-  borovica: [1.00, 0.65, 0.40, 0.25, 0.15, 0.10, 0.08], // dokvitá — rýchly pokles
-  travy:    [1.00, 1.40, 1.75, 1.85, 1.75, 1.50, 1.20], // vrcholí jún–júl
-  byliny:   [1.00, 1.20, 1.35, 1.50, 1.55, 1.45, 1.30], // stúpa celé leto
-  huby:     [1.00, 1.15, 1.20, 1.10, 1.05, 0.95, 0.85], // závisí od vlahy
-  breza:    [1.00, 0.40, 0.15, 0.05, 0.02, 0.02, 0.02], // hotová
-  lieska:   [1.00, 0.50, 0.20, 0.10, 0.05, 0.05, 0.05], // hotová
-  ambrozia: [0.00, 0.00, 0.00, 0.00, 0.00, 0.05, 0.15], // začína až v júli
+  borovica: [1.00, 0.55, 0.35, 0.20, 0.12, 0.07, 0.04], // dokvitá — pokles pokračuje
+  travy:    [1.00, 1.25, 1.50, 1.60, 1.55, 1.35, 1.10], // stúpa k vrcholu jún–júl
+  byliny:   [1.00, 1.20, 1.40, 1.55, 1.55, 1.40, 1.25], // stúpa (skorocel, pŕhľava)
+  huby:     [1.00, 1.20, 1.25, 1.15, 1.05, 0.95, 0.82], // závisí od teploty a zrážok
+  breza:    [1.00, 0.30, 0.10, 0.04, 0.02, 0.02, 0.01], // sezóna ukončená
+  lieska:   [1.00, 0.40, 0.15, 0.06, 0.03, 0.03, 0.02], // sezóna ukončená
+  ambrozia: [0.00, 0.00, 0.00, 0.02, 0.06, 0.15, 0.30], // začína v júli
 };
 
 function wmoToEmoji(code) {
@@ -588,14 +588,38 @@ function calcBestWorstTime(dayData, city = "", chosenIds = []) {
     return "Najnižšia koncentrácia dňa";
   }
 
+  // Find the longest consecutive LOW-RISK window (score < 0.45) in daytime
+  const LOW_THRESH = 0.45;
+  let longestStart = bestStart, longestLen = 3;
+  let curStart = -1, curLen = 0;
+  for (let hr = 6; hr <= 22; hr++) {
+    if (scores[hr] < LOW_THRESH) {
+      if (curStart < 0) curStart = hr;
+      curLen++;
+      if (curLen > longestLen) { longestLen = curLen; longestStart = curStart; }
+    } else {
+      curStart = -1; curLen = 0;
+    }
+  }
+  const longestEnd = Math.min(longestStart + longestLen, 23);
+
+  // Now (current hour) risk level
+  const nowHour    = new Date().getHours();
+  const nowScore   = scores[nowHour] || 0;
+  const nowLevel   = nowScore < 0.3 ? "nízke" : nowScore < 0.6 ? "stredné" : nowScore < 0.85 ? "vysoké" : "veľmi vysoké";
+  const nowColor   = nowScore < 0.3 ? "#16a34a" : nowScore < 0.6 ? "#ca8a04" : nowScore < 0.85 ? "#ea580c" : "#dc2626";
+
   return {
-    best:        `${fmt(bestStart)}–${fmt(bestEnd)}`,
+    best:        `${fmt(longestStart)}–${fmt(longestEnd)}`,
     worst:       `${fmt(worstStart)}–${fmt(worstEnd)}`,
-    bestReason:  bestReason(bestHour, bestStart),
+    bestReason:  bestReason(bestHour, longestStart),
     worstReason: worstReason(worstHour, worstStart),
+    bestDuration: longestLen,
     fromHourly:  true,
     worstScore:  Math.round(worstMax * 100),
     bestScore:   Math.round(bestMin * 100),
+    nowScore, nowLevel, nowColor, nowHour,
+    hourlyScores: scores,  // expose for mini timeline
   };
 }
 
@@ -893,8 +917,31 @@ function AlmanachPage({ T }) {
 function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weatherLoading, T }) {
   if (!T) T = LIGHT;
   const today = new Date().toLocaleDateString("sk-SK",{weekday:"long",year:"numeric",month:"long",day:"numeric"});
-  const rc  = forecast ? (COL[forecast.riziko]||"#888") : "#3A7D44";
-  const rbg = forecast ? (BG[forecast.riziko]||"#f9fafb") : "#f9fafb";
+  // Hybrid scores for today — use calcHybrid if weather available, else calcForecast
+  const hybridToday = (weather?.length && chosen?.length)
+    ? calcHybrid(city, chosen, sens, weather)
+    : null;
+
+  // Today's max score from hybrid
+  const todayMax = hybridToday
+    ? Math.max(...hybridToday.map(h => h.days[0]?.score || 0), 0)
+    : forecast?.total || 0;
+  const todayRiziko = S2L[todayMax] || forecast?.riziko || "—";
+
+  // Tomorrow's max score for trend arrow
+  const tomorrowMax = hybridToday
+    ? Math.max(...hybridToday.map(h => h.days[1]?.score || 0), 0)
+    : (forecast?.days?.[0]?.s || 0);
+
+  const trendDiff   = tomorrowMax - todayMax;
+  const trendUp     = trendDiff >  0.4;
+  const trendDown   = trendDiff < -0.4;
+  const trendColor  = trendDown ? "#16a34a" : trendUp ? "#dc2626" : "#94a3b8";
+  const trendArrow  = trendDown ? "↓" : trendUp ? "↑" : "→";
+  const trendLabel  = trendDown ? "Zajtra lepšie" : trendUp ? "Zajtra horšie" : "Zajtra podobne";
+
+  const rc  = COL[todayRiziko] || (forecast ? COL[forecast.riziko]||"#888" : "#3A7D44");
+  const rbg = BG[todayRiziko]  || (forecast ? BG[forecast.riziko]||"#f9fafb" : "#f9fafb");
 
   return (
     <div className="forecast-page" style={{ flex:1, padding:"32px 36px", overflowY:"auto", overflowX:"hidden", background:T.bg, transition:"background .3s" }}>
@@ -920,40 +967,132 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
           </div>
 
           <div className="top-grid" style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16, marginBottom:16 }}>
-            <div className="card" style={{ padding:24, background:`linear-gradient(135deg,${rbg},#fff)`, border:`1px solid ${rc}20` }}>
-              <div className="lbl">Celkové riziko</div>
-              <div style={{ fontSize:32, fontWeight:700, color:rc, letterSpacing:"-1px", marginBottom:12 }}>{forecast.riziko}</div>
-              <Dots score={forecast.total} color={rc}/>
+            <div className="card" style={{ padding:24, background:`linear-gradient(135deg,${rbg},${T.card})`, border:`1px solid ${rc}20` }}>
+              <div className="lbl">Celkové riziko · dnes</div>
+              {/* Main score */}
+              <div style={{ display:"flex", alignItems:"baseline", gap:10, marginBottom:10 }}>
+                <div style={{ fontSize:30, fontWeight:700, color:rc, letterSpacing:"-1px" }}>{todayRiziko}</div>
+                {/* Tomorrow trend arrow */}
+                <div style={{ display:"flex", alignItems:"center", gap:4, padding:"3px 8px",
+                  background:`${trendColor}14`, borderRadius:20, border:`1px solid ${trendColor}30` }}>
+                  <span style={{ fontSize:14, fontWeight:700, color:trendColor }}>{trendArrow}</span>
+                  <span style={{ fontSize:10.5, fontWeight:600, color:trendColor }}>{trendLabel}</span>
+                </div>
+              </div>
+              <Dots score={todayMax} color={rc}/>
+              {/* Tomorrow preview */}
+              {tomorrowMax > 0 && (
+                <div style={{ marginTop:10, fontSize:11, color:T.textFaint }}>
+                  Zajtra: <span style={{ fontWeight:600, color:COL[S2L[tomorrowMax]]||T.textMuted }}>{S2L[tomorrowMax]}</span>
+                  {trendDiff !== 0 && (
+                    <span style={{ marginLeft:4, color:trendColor }}>
+                      ({trendDiff > 0 ? "+" : ""}{trendDiff.toFixed(1)} bod)
+                    </span>
+                  )}
+                </div>
+              )}
               {forecast.warn && (
-                <div style={{ marginTop:12, padding:"8px 10px", background:`${rc}12`, borderRadius:8, fontSize:12, color:rc, lineHeight:1.5 }}>{forecast.warn}</div>
+                <div style={{ marginTop:10, padding:"8px 10px", background:`${rc}12`, borderRadius:8, fontSize:12, color:rc, lineHeight:1.5 }}>{forecast.warn}</div>
               )}
             </div>
-            <div className="card" style={{ padding:24 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:12 }}>
-                <div className="lbl" style={{ marginBottom:0 }}>Čas vonku</div>
-                {weather && weather[0]?.hourly?.length > 0 && (
-                  <div style={{ fontSize:10, color:T.textFaint }}>🕐 hodinový model</div>
-                )}
-              </div>
+            <div className="card" style={{ padding:22 }}>
               {(() => {
                 const bw = calcBestWorstTime(weather?.[0], city, chosen);
+                const hasHourly = bw.hourlyScores?.length > 0;
+
+                // Score → color for timeline bars
+                const barColor = s =>
+                  s < 0.25 ? "#16a34a" :
+                  s < 0.50 ? "#84cc16" :
+                  s < 0.70 ? "#f59e0b" :
+                  s < 0.88 ? "#ea580c" : "#dc2626";
+
+                const HOURS = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22];
+                const HOUR_LABELS = ["6","","","9","","","12","","","15","","","18","","","21","22"];
+
                 return (
-                  <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-                    <div style={{ display:"flex", alignItems:"flex-start", gap:12 }}>
-                      <div style={{ width:32, height:32, minWidth:32, background:T.accentLight, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16 }}>✅</div>
-                      <div>
-                        <div style={{ fontSize:11, color:T.textFaint, textTransform:"uppercase", letterSpacing:.5 }}>Najlepší čas</div>
-                        <div style={{ fontSize:16, fontWeight:700, color:"#166534" }}>{bw.best}</div>
-                        <div style={{ fontSize:11, color:"#16a34a", marginTop:2 }}>{bw.bestReason}</div>
-                      </div>
+                  <div>
+                    {/* Header row */}
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                      <div className="lbl" style={{ marginBottom:0 }}>Čas vonku</div>
+                      {/* Now indicator */}
+                      {hasHourly && (
+                        <div style={{ display:"flex", alignItems:"center", gap:5, padding:"3px 8px",
+                          background:`${bw.nowColor}15`, borderRadius:20, border:`1px solid ${bw.nowColor}30` }}>
+                          <div style={{ width:6, height:6, borderRadius:"50%", background:bw.nowColor }}/>
+                          <span style={{ fontSize:10.5, fontWeight:600, color:bw.nowColor }}>
+                            Teraz {bw.nowHour}:00 — {bw.nowLevel}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    <div style={{ height:1, background:T.divider }}/>
-                    <div style={{ display:"flex", alignItems:"flex-start", gap:12 }}>
-                      <div style={{ width:32, height:32, minWidth:32, background:"#FEF2F2", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16 }}>⚠️</div>
+
+                    {/* Hourly mini-timeline */}
+                    {hasHourly && (
+                      <div style={{ marginBottom:14 }}>
+                        <div style={{ display:"flex", gap:2, alignItems:"flex-end", height:32 }}>
+                          {HOURS.map((hr, idx) => {
+                            const s    = bw.hourlyScores[hr] ?? 0;
+                            const col  = barColor(s);
+                            const isNow = hr === bw.nowHour;
+                            const barH = Math.max(4, Math.round(s * 28));
+                            return (
+                              <div key={hr} style={{ flex:1, display:"flex", flexDirection:"column",
+                                alignItems:"center", justifyContent:"flex-end" }}>
+                                <div style={{
+                                  width:"100%", height:barH, borderRadius:"2px 2px 0 0",
+                                  background: col,
+                                  opacity: isNow ? 1 : 0.75,
+                                  outline: isNow ? `2px solid ${col}` : "none",
+                                  outlineOffset: 1,
+                                  transition:"height .3s",
+                                }}/>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {/* Hour labels */}
+                        <div style={{ display:"flex", gap:2, marginTop:2 }}>
+                          {HOUR_LABELS.map((lbl,i) => (
+                            <div key={i} style={{ flex:1, textAlign:"center",
+                              fontSize:8.5, color: HOURS[i]===bw.nowHour?"#3A7D44":T.textPlaceholder,
+                              fontWeight: HOURS[i]===bw.nowHour?700:400 }}>
+                              {lbl}
+                            </div>
+                          ))}
+                        </div>
+                        {/* Color legend */}
+                        <div style={{ display:"flex", alignItems:"center", gap:4, marginTop:6 }}>
+                          <div style={{ display:"flex", gap:1, flex:1 }}>
+                            {["#16a34a","#84cc16","#f59e0b","#ea580c","#dc2626"].map(c => (
+                              <div key={c} style={{ flex:1, height:3, background:c, borderRadius:1 }}/>
+                            ))}
+                          </div>
+                          <span style={{ fontSize:9, color:T.textPlaceholder }}>nízky → vysoký</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{ height:1, background:T.divider, marginBottom:12 }}/>
+
+                    {/* Best + Worst */}
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
                       <div>
-                        <div style={{ fontSize:11, color:T.textFaint, textTransform:"uppercase", letterSpacing:.5 }}>Najhorší čas</div>
-                        <div style={{ fontSize:16, fontWeight:700, color:"#DC2626" }}>{bw.worst}</div>
-                        <div style={{ fontSize:11, color:"#dc2626", marginTop:2 }}>{bw.worstReason}</div>
+                        <div style={{ fontSize:10, color:T.textFaint, textTransform:"uppercase",
+                          letterSpacing:.5, marginBottom:3 }}>✅ Odporúčaný čas</div>
+                        <div style={{ fontSize:15, fontWeight:700, color:"#16a34a" }}>{bw.best}</div>
+                        {bw.bestDuration > 0 && (
+                          <div style={{ fontSize:10, color:"#16a34a", marginTop:1 }}>
+                            ~{bw.bestDuration}h s nízkym peľom
+                          </div>
+                        )}
+                        <div style={{ fontSize:10.5, color:T.textMuted, marginTop:3, lineHeight:1.4 }}>{bw.bestReason}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:10, color:T.textFaint, textTransform:"uppercase",
+                          letterSpacing:.5, marginBottom:3 }}>⚠️ Vyhnúť sa</div>
+                        <div style={{ fontSize:15, fontWeight:700, color:"#dc2626" }}>{bw.worst}</div>
+                        <div style={{ fontSize:10.5, color:T.textMuted, marginTop:3, lineHeight:1.4 }}>{bw.worstReason}</div>
                       </div>
                     </div>
                   </div>
@@ -1061,10 +1200,20 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
                 <div className="lbl" style={{ marginBottom:0 }}>Tvoje alergény dnes</div>
                 <div style={{ fontSize:11, color:T.textFaint }}>týždeň 21–22/2026</div>
               </div>
-              {forecast.allergens.map((a,i) => {
+              {(hybridToday
+                  ? hybridToday.map(h => ({
+                      ...POLLEN_DATA[h.id],
+                      id: h.id,
+                      s: h.days[0]?.score || 0,
+                      uroven: h.days[0]?.uroven || "Veľmi nízka",
+                      isRiskyForUser: h.days[0]?.score >= (SENS_THRESHOLD[sens]||3),
+                      pelZrn: (CITY_DATA[city]?.[`pel${h.id.charAt(0).toUpperCase()+h.id.slice(1)}`]) || POLLEN_DATA[h.id]?.pelZrn,
+                    }))
+                  : forecast.allergens
+                ).map((a,i) => {
                 const col = COL[a.uroven]||"#888";
                 return (
-                  <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 0", borderBottom: i<forecast.allergens.length-1?`1px solid ${T.divider}`:"none" }}>
+                  <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 0", borderBottom: i<(hybridToday||forecast.allergens).length-1?`1px solid ${T.divider}`:"none" }}>
                     <div style={{ fontSize:20, width:28, textAlign:"center", flexShrink:0 }}>{a.emoji}</div>
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
@@ -1226,7 +1375,7 @@ function Sidebar({ page, setPage, city, setCity, chosen, toggle, sens, setSens, 
       <div style={{ padding:"14px 20px", borderTop:`1px solid ${T.sidebarBorder}` }}>
         <div style={{ fontSize:11, color:T.textPlaceholder, lineHeight:1.6 }}>
           Dáta: ÚVZ SR<br/>
-          21. týždeň 2026 · 27.5.2026
+          22. týždeň 2026 · 3.6.2026
         </div>
       </div>
     </aside>
