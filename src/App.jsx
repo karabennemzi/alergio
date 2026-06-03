@@ -234,6 +234,41 @@ const PROGNOZA = {
 const SENS_MULT = { "nízka":1.0, "stredná":1.0, "vysoká":1.0 };
 const SENS_THRESHOLD = { "nízka": 4, "stredná": 3, "vysoká": 2 };
 // SENS_THRESHOLD = od akého skóre dostane upozornenie "rizikové pre teba"
+
+// Posun vnímania rizika podľa citlivosti
+// Reálny peľ je rovnaký, ale vnímané riziko sa líši
+const SENS_SHIFT = { "nízka": -1, "stredná": 0, "vysoká": 1 };
+
+// Vráti VNÍMANÉ skóre (pre farbu, label, varovanie) — nie reálny peľ
+function perceivedScore(realScore, sens) {
+  const shift = SENS_SHIFT[sens] ?? 0;
+  return Math.min(5, Math.max(0, realScore + shift));
+}
+
+// Bezpečný prah pre "čas vonku" podľa citlivosti
+const SAFE_THRESHOLD = { "nízka": 0.60, "stredná": 0.45, "vysoká": 0.28 };
+
+// Text odporúčania podľa citlivosti a skóre
+function sensitivityAdvice(percScore, sens) {
+  if (sens === "vysoká") {
+    if (percScore >= 4) return "Silná alergia: zvážte zostať doma, noste respirátor vonku.";
+    if (percScore >= 3) return "Zvýšená opatrnosť: obmedzte pobyt vonku, majte lieky pri sebe.";
+    if (percScore >= 2) return "Mierny peľ: môžete ísť von, sledujte príznaky.";
+    return "Nízke riziko aj pre citlivých — vhodný čas na vonkajšie aktivity.";
+  }
+  if (sens === "nízka") {
+    if (percScore >= 5) return "Extrémne vysoký peľ — aj pri nízkej citlivosti možné príznaky.";
+    if (percScore >= 4) return "Vysoký peľ — pri dlhšom pobyte vonku môžu nastať príznaky.";
+    return "Väčšina ľudí s nízkou citlivosťou bez výrazných príznakov.";
+  }
+  // stredná — default
+  if (percScore >= 4) return "Vysoký peľ — obmedzte pobyt vonku, majte antihistaminiká.";
+  if (percScore >= 3) return "Stredný peľ — citlivé osoby môžu pociťovať príznaky.";
+  if (percScore >= 2) return "Nízky peľ — príznaky len pri dlhšom pobyte vonku.";
+  return "Minimálny peľ — vhodný čas vonku.";
+}
+
+// Citlivosť ovplyvňuje: prah varovania, bezpečný čas, farbu rizika, text odporúčaní
 const S2L = ["","Veľmi nízka","Nízka","Stredná","Vysoká","Veľmi vysoká"];
 const DAYS = ["Zajtra","Pozajtra","Za 3 dni"];
 
@@ -466,7 +501,7 @@ const BASE_HOURLY_POLLEN = HOURLY_PROFILES.travy;
 // Mestá v kotlinách — ranná teplotná inverzia zachytáva peľ
 const VALLEY_CITIES = new Set(["Bratislava","Nitra","Trenčín"]);
 
-function calcBestWorstTime(dayData, city = "", chosenIds = []) {
+function calcBestWorstTime(dayData, city = "", chosenIds = [], sens = "stredná") {
   const hourly = dayData?.hourly;
   if (!hourly || hourly.length < 24) {
     return {
@@ -589,7 +624,7 @@ function calcBestWorstTime(dayData, city = "", chosenIds = []) {
   }
 
   // Find the longest consecutive LOW-RISK window (score < 0.45) in daytime
-  const LOW_THRESH = 0.45;
+  const LOW_THRESH = SAFE_THRESHOLD[sens] ?? 0.45;
   let longestStart = bestStart, longestLen = 3;
   let curStart = -1, curLen = 0;
   for (let hr = 6; hr <= 22; hr++) {
@@ -922,26 +957,35 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
     ? calcHybrid(city, chosen, sens, weather)
     : null;
 
-  // Today's max score from hybrid
-  const todayMax = hybridToday
+  // Reálne max skóre dnes
+  const todayMax    = hybridToday
     ? Math.max(...hybridToday.map(h => h.days[0]?.score || 0), 0)
     : forecast?.total || 0;
-  const todayRiziko = S2L[todayMax] || forecast?.riziko || "—";
 
-  // Tomorrow's max score for trend arrow
-  const tomorrowMax = hybridToday
+  // VNÍMANÉ skóre — posunuté citlivosťou (pre farbu, label, varovania)
+  const todayPerc   = perceivedScore(todayMax, sens);
+  const todayRiziko = S2L[todayPerc] || forecast?.riziko || "—";
+  const sensAdvice  = sensitivityAdvice(todayPerc, sens);
+
+  // Zajtra — reálne + vnímané
+  const tomorrowMax  = hybridToday
     ? Math.max(...hybridToday.map(h => h.days[1]?.score || 0), 0)
     : (forecast?.days?.[0]?.s || 0);
+  const tomorrowPerc = perceivedScore(tomorrowMax, sens);
 
-  const trendDiff   = tomorrowMax - todayMax;
+  const trendDiff   = tomorrowPerc - todayPerc;
   const trendUp     = trendDiff >  0.4;
   const trendDown   = trendDiff < -0.4;
   const trendColor  = trendDown ? "#16a34a" : trendUp ? "#dc2626" : "#94a3b8";
   const trendArrow  = trendDown ? "↓" : trendUp ? "↑" : "→";
   const trendLabel  = trendDown ? "Zajtra lepšie" : trendUp ? "Zajtra horšie" : "Zajtra podobne";
 
-  const rc  = COL[todayRiziko] || (forecast ? COL[forecast.riziko]||"#888" : "#3A7D44");
-  const rbg = BG[todayRiziko]  || (forecast ? BG[forecast.riziko]||"#f9fafb" : "#f9fafb");
+  const rc  = COL[todayRiziko] || "#3A7D44";
+  const rbg = BG[todayRiziko]  || "#f9fafb";
+
+  // Warning threshold from SENS_THRESHOLD
+  const warnAt   = SENS_THRESHOLD[sens] ?? 3;
+  const sensWarn = todayPerc >= warnAt ? sensAdvice : null;
 
   return (
     <div className="forecast-page" style={{ flex:1, padding:"32px 36px", overflowY:"auto", overflowX:"hidden", background:T.bg, transition:"background .3s" }}>
@@ -968,36 +1012,57 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
 
           <div className="top-grid" style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16, marginBottom:16 }}>
             <div className="card" style={{ padding:24, background:`linear-gradient(135deg,${rbg},${T.card})`, border:`1px solid ${rc}20` }}>
-              <div className="lbl">Celkové riziko · dnes</div>
-              {/* Main score */}
-              <div style={{ display:"flex", alignItems:"baseline", gap:10, marginBottom:10 }}>
-                <div style={{ fontSize:30, fontWeight:700, color:rc, letterSpacing:"-1px" }}>{todayRiziko}</div>
-                {/* Tomorrow trend arrow */}
-                <div style={{ display:"flex", alignItems:"center", gap:4, padding:"3px 8px",
-                  background:`${trendColor}14`, borderRadius:20, border:`1px solid ${trendColor}30` }}>
-                  <span style={{ fontSize:14, fontWeight:700, color:trendColor }}>{trendArrow}</span>
-                  <span style={{ fontSize:10.5, fontWeight:600, color:trendColor }}>{trendLabel}</span>
+              {/* Sensitivity badge */}
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                <div className="lbl" style={{ marginBottom:0 }}>Celkové riziko · dnes</div>
+                <div style={{ fontSize:9.5, padding:"2px 7px", borderRadius:20,
+                  background: sens==="vysoká"?"#fef2f2": sens==="nízka"?"#f0fdf4":"#f8faff",
+                  color: sens==="vysoká"?"#dc2626": sens==="nízka"?"#16a34a":"#6b7280",
+                  border: `1px solid ${sens==="vysoká"?"#fecaca": sens==="nízka"?"#bbf7d0":"#e2e8f0"}`,
+                  fontWeight:600, textTransform:"uppercase", letterSpacing:.5 }}>
+                  {sens==="vysoká"?"⚡ Vysoká citlivosť": sens==="nízka"?"😌 Nízka citlivosť":"😐 Stredná citlivosť"}
                 </div>
               </div>
-              <Dots score={todayMax} color={rc}/>
-              {/* Tomorrow preview */}
-              {tomorrowMax > 0 && (
-                <div style={{ marginTop:10, fontSize:11, color:T.textFaint }}>
-                  Zajtra: <span style={{ fontWeight:600, color:COL[S2L[tomorrowMax]]||T.textMuted }}>{S2L[tomorrowMax]}</span>
-                  {trendDiff !== 0 && (
-                    <span style={{ marginLeft:4, color:trendColor }}>
-                      ({trendDiff > 0 ? "+" : ""}{trendDiff.toFixed(1)} bod)
+              {/* Main score — color shifted for high sensitivity */}
+              <div style={{ display:"flex", alignItems:"baseline", gap:10, marginBottom:10 }}>
+                <div style={{ fontSize:28, fontWeight:700, color:rc, letterSpacing:"-1px" }}>
+                  {todayRiziko}
+                  {sens !== "stredná" && todayPerc !== todayMax && (
+                    <span style={{ fontSize:10, fontWeight:400, color:T.textFaint, marginLeft:5 }}>
+                      (merané: {S2L[todayMax]})
                     </span>
                   )}
                 </div>
+                {/* Tomorrow trend */}
+                <div style={{ display:"flex", alignItems:"center", gap:4, padding:"3px 8px",
+                  background:`${trendColor}14`, borderRadius:20, border:`1px solid ${trendColor}30` }}>
+                  <span style={{ fontSize:13, fontWeight:700, color:trendColor }}>{trendArrow}</span>
+                  <span style={{ fontSize:10, fontWeight:600, color:trendColor }}>{trendLabel}</span>
+                </div>
+              </div>
+              <Dots score={todayPerc} color={rc}/>
+              {/* Tomorrow preview */}
+              {tomorrowMax > 0 && (
+                <div style={{ marginTop:8, fontSize:11, color:T.textFaint }}>
+                  Zajtra: <span style={{ fontWeight:600, color:COL[S2L[tomorrowMax]]||T.textMuted }}>{S2L[tomorrowMax]}</span>
+                  {trendDiff !== 0 && <span style={{ marginLeft:4, color:trendColor }}>({trendDiff>0?"+":""}{trendDiff.toFixed(1)})</span>}
+                </div>
               )}
-              {forecast.warn && (
-                <div style={{ marginTop:10, padding:"8px 10px", background:`${rc}12`, borderRadius:8, fontSize:12, color:rc, lineHeight:1.5 }}>{forecast.warn}</div>
+              {/* Sensitivity-based warning */}
+              {sensWarn && (
+                <div style={{ marginTop:10, padding:"8px 10px", background:`${rc}15`, borderRadius:8,
+                  fontSize:11.5, color:rc, lineHeight:1.5, fontWeight:500 }}>
+                  {sensWarn}
+                </div>
               )}
+              {/* Outdoor message */}
+              <div style={{ marginTop:8, fontSize:11, color:T.textMuted, lineHeight:1.4, fontStyle:"italic" }}>
+                {sensAdvice}
+              </div>
             </div>
             <div className="card" style={{ padding:22 }}>
               {(() => {
-                const bw = calcBestWorstTime(weather?.[0], city, chosen);
+                const bw = calcBestWorstTime(weather?.[0], city, chosen, sens);
                 const hasHourly = bw.hourlyScores?.length > 0;
 
                 // Score → color for timeline bars
@@ -1211,7 +1276,10 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
                     }))
                   : forecast.allergens
                 ).map((a,i) => {
-                const col = COL[a.uroven]||"#888";
+                const realS = a.s || 0;
+                const percS = perceivedScore(realS, sens);
+                const col   = COL[S2L[percS]] || COL[a.uroven] || "#888";
+                const bg    = BG[S2L[percS]]  || "#f9fafb";
                 return (
                   <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 0", borderBottom: i<(hybridToday||forecast.allergens).length-1?`1px solid ${T.divider}`:"none" }}>
                     <div style={{ fontSize:20, width:28, textAlign:"center", flexShrink:0 }}>{a.emoji}</div>
@@ -1679,6 +1747,53 @@ function ConcentrationInfoWidget({ T }) {
   );
 }
 
+// ── GA4 dynamické načítanie po súhlase ──
+function loadGA4() {
+  if (window.__ga4Loaded) return;
+  window.__ga4Loaded = true;
+  const s = document.createElement("script");
+  s.async = true;
+  s.src = "https://www.googletagmanager.com/gtag/js?id=G-YC302EP2P7";
+  document.head.appendChild(s);
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){window.dataLayer.push(arguments);}
+  window.gtag = gtag;
+  gtag("js", new Date());
+  gtag("config", "G-YC302EP2P7");
+}
+
+function CookieBanner({ onConsent, T }) {
+  if (!T) T = LIGHT;
+  return (
+    <div style={{
+      position:"fixed", bottom:0, left:0, right:0, zIndex:1000,
+      background:T.card, borderTop:`1px solid ${T.cardBorder}`,
+      padding:"12px 20px",
+      boxShadow:"0 -4px 20px rgba(0,0,0,.08)",
+      display:"flex", alignItems:"center", gap:12, flexWrap:"wrap",
+    }}>
+      <span style={{ fontSize:12.5, color:T.textMuted, flex:1, minWidth:200, lineHeight:1.5 }}>
+        🍪 Používame analytické cookies (Google Analytics) na zlepšenie aplikácie.
+        Vaše nastavenia alergií ukladáme lokálne vo vašom prehliadači.{" "}
+        <a href="https://policies.google.com/privacy" target="_blank" rel="noopener"
+          style={{ color:"#3A7D44", textDecoration:"underline" }}>Viac info</a>
+      </span>
+      <div style={{ display:"flex", gap:8, flexShrink:0 }}>
+        <button onClick={()=>onConsent(false)} style={{
+          padding:"7px 14px", border:`1.5px solid ${T.cardBorder}`, borderRadius:8,
+          background:"transparent", color:T.textMuted, fontSize:12.5, fontWeight:500,
+          fontFamily:"'Inter',sans-serif", cursor:"pointer",
+        }}>Odmietnuť</button>
+        <button onClick={()=>onConsent(true)} style={{
+          padding:"7px 16px", border:"none", borderRadius:8,
+          background:"#1a3622", color:"#fff", fontSize:12.5, fontWeight:600,
+          fontFamily:"'Inter',sans-serif", cursor:"pointer",
+        }}>Prijať analytiku</button>
+      </div>
+    </div>
+  );
+}
+
 function DynamicStyles({ T }) {
   return (
     <style>{`
@@ -1703,14 +1818,38 @@ function DynamicStyles({ T }) {
 
 /* ══ ROOT APP ══ */
 export default function App() {
+  // ── Preferences — uložené v localStorage (funkčné, nevyžadujú súhlas) ──
   const [page,    setPage]    = useState("forecast");
-  const [city,    setCity]    = useState("Bratislava");
-  const [chosen,  setChosen]  = useState(["travy","borovica"]);
-  const [sens,    setSens]    = useState("stredná");
+  const [city,    setCity]    = useState(() => localStorage.getItem("alergio_city") || "Bratislava");
+  const [chosen,  setChosen]  = useState(() => {
+    try { return JSON.parse(localStorage.getItem("alergio_allergens")) || ["travy","borovica"]; }
+    catch { return ["travy","borovica"]; }
+  });
+  const [sens,    setSens]    = useState(() => localStorage.getItem("alergio_sens") || "stredná");
+  const [dark,    setDark]    = useState(() => localStorage.getItem("alergio_dark") === "1");
   const [forecast,setForecast]= useState(null);
   const [weather, setWeather] = useState(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
-  const [dark,    setDark]    = useState(false);
+
+  // ── Cookie consent ──
+  const [consent, setConsent] = useState(() => localStorage.getItem("alergio_consent")); // "yes"|"no"|null
+
+  // Uložiť preferencie pri zmene
+  useEffect(() => { localStorage.setItem("alergio_city", city); }, [city]);
+  useEffect(() => { localStorage.setItem("alergio_allergens", JSON.stringify(chosen)); }, [chosen]);
+  useEffect(() => { localStorage.setItem("alergio_sens", sens); }, [sens]);
+  useEffect(() => { localStorage.setItem("alergio_dark", dark ? "1" : "0"); }, [dark]);
+
+  // Načítať GA4 ak je súhlas
+  useEffect(() => { if (consent === "yes") loadGA4(); }, [consent]);
+
+  const handleConsent = (accepted) => {
+    const val = accepted ? "yes" : "no";
+    localStorage.setItem("alergio_consent", val);
+    setConsent(val);
+    if (accepted) loadGA4();
+  };
+
   const T = dark ? DARK : LIGHT;
 
   const toggle = id => setChosen(p => p.includes(id) ? p.filter(x=>x!==id) : [...p,id]);
@@ -1839,6 +1978,7 @@ export default function App() {
       `}</style>
 
       <DynamicStyles T={T}/>
+      {consent === null && <CookieBanner onConsent={handleConsent} T={T}/>}
       <div className="layout">
 
         {/* Sidebar — hidden on mobile when showing results */}
@@ -1848,7 +1988,7 @@ export default function App() {
 
         {/* Main content */}
         <main className={`main-content${!showMobileResults && page==="forecast" ? " main-hidden-mobile" : ""}`}
-          style={{ flex:1, overflowY:"auto" }}>
+          style={{ flex:1, overflowY:"auto", paddingBottom: consent===null ? 80 : 0 }}>
 
           {/* Mobile back bar — only visible on mobile when showing results */}
           {page === "forecast" && forecast && (
