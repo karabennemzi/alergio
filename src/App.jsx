@@ -270,6 +270,8 @@ function sensitivityAdvice(percScore, sens) {
 
 // Citlivosť ovplyvňuje: prah varovania, bezpečný čas, farbu rizika, text odporúčaní
 const S2L = ["","Veľmi nízka","Nízka","Stredná","Vysoká","Veľmi vysoká"];
+// Stredný rod — pre "riziko je..." (neuter)
+const S2L_N = ["","Veľmi nízke","Nízke","Stredné","Vysoké","Veľmi vysoké"];
 const DAYS = ["Zajtra","Pozajtra","Za 3 dni"];
 
 // Vysvetlivky koncentrácií peľu — ÚVZ SR definícia
@@ -964,7 +966,7 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
 
   // VNÍMANÉ skóre — posunuté citlivosťou (pre farbu, label, varovania)
   const todayPerc   = perceivedScore(todayMax, sens);
-  const todayRiziko = S2L[todayPerc] || forecast?.riziko || "—";
+  const todayRiziko = S2L_N[todayPerc] || S2L[todayPerc] || forecast?.riziko || "—";
   const sensAdvice  = sensitivityAdvice(todayPerc, sens);
 
   // Zajtra — reálne + vnímané
@@ -1044,7 +1046,7 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
               {/* Tomorrow preview */}
               {tomorrowMax > 0 && (
                 <div style={{ marginTop:8, fontSize:11, color:T.textFaint }}>
-                  Zajtra: <span style={{ fontWeight:600, color:COL[S2L[tomorrowMax]]||T.textMuted }}>{S2L[tomorrowMax]}</span>
+                  Zajtra: <span style={{ fontWeight:600, color:COL[S2L[tomorrowMax]]||T.textMuted }}>{S2L_N[tomorrowMax]}</span>
                   {trendDiff !== 0 && <span style={{ marginLeft:4, color:trendColor }}>({trendDiff>0?"+":""}{trendDiff.toFixed(1)})</span>}
                 </div>
               )}
