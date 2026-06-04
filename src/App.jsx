@@ -441,55 +441,77 @@ function weatherDriver(day, prevRain) {
   return { text: "Priemerné podmienky", pos: null };
 }
 
+const WEATHER_TTL = 60 * 60 * 1000; // 1 hodina
+
+function weatherCacheGet(city) {
+  try {
+    const raw = localStorage.getItem(`alergio_wx_${city}`);
+    if (!raw) return null;
+    const { ts, data } = JSON.parse(raw);
+    if (Date.now() - ts > WEATHER_TTL) return null;
+    return data;
+  } catch { return null; }
+}
+
+function weatherCacheSet(city, data) {
+  try {
+    localStorage.setItem(`alergio_wx_${city}`,
+      JSON.stringify({ ts: Date.now(), data }));
+  } catch {}
+}
+
 async function fetchWeather(city) {
+  // Skontroluj cache — ak nie je staršia ako 1h, vráť uloženú
+  const cached = weatherCacheGet(city);
+  if (cached) return cached;
+
   const [lat, lon] = CITY_COORDS[city] || [48.15, 17.11];
-  // Priame volanie z prehliadača — Open-Meteo blokuje serverové IP
+  // Priamy request z prehliadača — bez retry (Open-Meteo blokuje datacenter IP)
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
     `&daily=temperature_2m_max,precipitation_sum,windspeed_10m_max,cloudcover_mean,weathercode` +
     `&hourly=temperature_2m,precipitation,windspeed_10m,cloudcover,relative_humidity_2m` +
     `&forecast_days=7&timezone=Europe%2FBratislava`;
 
-  // Retry 3x pri dočasnom výpadku
-  let lastErr;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-        const res = await fetch(url);
-      if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
-      const data = await res.json();
-      const d = data.daily;
-      const h = data.hourly;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
 
-  // Parse hourly into per-day arrays (24h each)
-  const hourlyByDay = d.time.map((date, di) => {
-    return Array.from({length:24}, (_, hr) => {
-      const idx = di * 24 + hr;
-      return {
-        hour:   hr,
-        temp:   h.temperature_2m[idx]  ?? 18,
-        rain:   h.precipitation[idx]   ?? 0,
-        wind:   h.windspeed_10m[idx]   ?? 10,
-        clouds: h.cloudcover[idx]      ?? 40,
-      };
-    });
-  });
-
-      return d.time.map((date, i) => ({
-        date,
-        temp:   d.temperature_2m_max[i]  || 20,
-        rain:   d.precipitation_sum[i]   || 0,
-        wind:   d.windspeed_10m_max[i]   || 10,
-        clouds: d.cloudcover_mean[i]     || 30,
-        wmo:    d.weathercode[i]         || 1,
-        emoji:  wmoToEmoji(d.weathercode[i] || 1),
-        hourly: hourlyByDay[i] || [],
-      }));
-    } catch (e) {
-      lastErr = e;
-      if (attempt < 2) await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
-    }
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(`${res.status}`);
+    const data = await res.json();
+    const d = data.daily;
+    const h = data.hourly;
+    const hourlyByDay = d.time.map((date, di) =>
+      Array.from({length:24}, (_, hr) => {
+        const idx = di * 24 + hr;
+        return {
+          hour:     hr,
+          temp:     h.temperature_2m[idx]        ?? 18,
+          rain:     h.precipitation[idx]         ?? 0,
+          wind:     h.windspeed_10m[idx]         ?? 10,
+          clouds:   h.cloudcover[idx]            ?? 40,
+          humidity: (h.relative_humidity_2m ?? [])[idx] ?? undefined,
+        };
+      })
+    );
+    const result = d.time.map((date, i) => ({
+      date,
+      temp:   d.temperature_2m_max[i]  || 20,
+      rain:   d.precipitation_sum[i]   || 0,
+      wind:   d.windspeed_10m_max[i]   || 10,
+      clouds: d.cloudcover_mean[i]     || 30,
+      wmo:    d.weathercode[i]         || 1,
+      emoji:  wmoToEmoji(d.weathercode[i] || 1),
+      hourly: hourlyByDay[i] || [],
+    }));
+    weatherCacheSet(city, result);
+    return result;
+  } catch (e) {
+    clearTimeout(timer);
+    throw new Error("Počasie nedostupné");
   }
-  throw new Error(lastErr?.message || "Počasie nedostupné");
 }
 
 // Per-alergén hodinové profily — každý alergén má iný čas uvoľňovania
@@ -1884,12 +1906,12 @@ export default function App() {
   const go = async () => {
     if (!chosen.length) return;
     setForecast(calcForecast(city, chosen, sens));
+    setWeather(null);
     setWeatherLoading(true);
-    try {
-      const w = await fetchWeather(city);
-      setWeather(w);
-    } catch(e) { console.warn("Počasie nedostupné:", e); }
-    finally { setWeatherLoading(false); }
+    fetchWeather(city)
+      .then(w => setWeather(w))
+      .catch(e => console.info("Počasie:", e.message)) // tiché zlyhanie
+      .finally(() => setWeatherLoading(false));
   };
 
   // Auto-refresh forecast when settings change
@@ -1900,10 +1922,11 @@ export default function App() {
   // Re-fetch weather when city changes (if forecast already shown)
   useEffect(() => {
     if (!forecast) return;
+    setWeather(null);
     setWeatherLoading(true);
     fetchWeather(city)
       .then(w => setWeather(w))
-      .catch(e => console.warn("Počasie nedostupné:", e))
+      .catch(e => console.info("Počasie:", e.message))
       .finally(() => setWeatherLoading(false));
   }, [city]);
 
