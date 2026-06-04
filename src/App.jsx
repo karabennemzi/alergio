@@ -1013,11 +1013,13 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
           </div>
 
           <div className="top-grid" style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16, marginBottom:16 }}>
-            <div className="card" style={{
+            <div style={{
               padding:24,
-              background: `linear-gradient(160deg, ${rbg} 0%, ${T.card} 65%)`,
-              border:`2px solid ${rc}50`,
-              boxShadow:`0 4px 24px ${rc}20`,
+              borderRadius:14,
+              background: `linear-gradient(160deg, ${rbg} 0%, ${T.card} 70%)`,
+              border:`2px solid ${rc}55`,
+              boxShadow:`0 4px 28px ${rc}22`,
+              transition:"background .3s, border .3s",
             }}>
               {/* Header: label + sensitivity badge */}
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
