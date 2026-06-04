@@ -443,13 +443,22 @@ function weatherDriver(day, prevRain) {
 
 async function fetchWeather(city) {
   const [lat, lon] = CITY_COORDS[city] || [48.15, 17.11];
-  // Vercel proxy — vyhýba sa CORS + retry logika na serveri
-  const url = `/api/weather?lat=${lat}&lon=${lon}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Počasie nedostupné");
-  const data = await res.json();
-  const d = data.daily;
-  const h = data.hourly;
+  // Priame volanie z prehliadača — Open-Meteo blokuje serverové IP
+  const url =
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+    `&daily=temperature_2m_max,precipitation_sum,windspeed_10m_max,cloudcover_mean,weathercode` +
+    `&hourly=temperature_2m,precipitation,windspeed_10m,cloudcover,relative_humidity_2m` +
+    `&forecast_days=7&timezone=Europe%2FBratislava`;
+
+  // Retry 3x pri dočasnom výpadku
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+        const res = await fetch(url);
+      if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
+      const data = await res.json();
+      const d = data.daily;
+      const h = data.hourly;
 
   // Parse hourly into per-day arrays (24h each)
   const hourlyByDay = d.time.map((date, di) => {
@@ -465,16 +474,22 @@ async function fetchWeather(city) {
     });
   });
 
-  return d.time.map((date, i) => ({
-    date,
-    temp:       d.temperature_2m_max[i]  || 20,
-    rain:       d.precipitation_sum[i]   || 0,
-    wind:       d.windspeed_10m_max[i]   || 10,
-    clouds:     d.cloudcover_mean[i]     || 30,
-    wmo:        d.weathercode[i]         || 1,
-    emoji:      wmoToEmoji(d.weathercode[i] || 1),
-    hourly:     hourlyByDay[i] || [],
-  }));
+      return d.time.map((date, i) => ({
+        date,
+        temp:   d.temperature_2m_max[i]  || 20,
+        rain:   d.precipitation_sum[i]   || 0,
+        wind:   d.windspeed_10m_max[i]   || 10,
+        clouds: d.cloudcover_mean[i]     || 30,
+        wmo:    d.weathercode[i]         || 1,
+        emoji:  wmoToEmoji(d.weathercode[i] || 1),
+        hourly: hourlyByDay[i] || [],
+      }));
+    } catch (e) {
+      lastErr = e;
+      if (attempt < 2) await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+    }
+  }
+  throw new Error(lastErr?.message || "Počasie nedostupné");
 }
 
 // Per-alergén hodinové profily — každý alergén má iný čas uvoľňovania
