@@ -1684,13 +1684,13 @@ function PollenTrendChart({ city, chosen, sens, weather, loading, T }) {
               </div>
             </div>
             {hybrid.map((h,hi) => {
-              const ds  = h.days[hoverIdx];
-              const col = allergenColors[hi];
+              const ds       = h.days[hoverIdx];
+              const levelCol = COL[ds.uroven] || "#94a3b8";
               return (
                 <div key={h.id} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
-                  <div style={{ width:8, height:8, borderRadius:"50%", background:col, flexShrink:0 }}/>
+                  <div style={{ width:8, height:8, borderRadius:"50%", background:levelCol, flexShrink:0 }}/>
                   <span style={{ fontSize:10.5, color:T.textSub, flex:1 }}>{h.emoji} {h.label}</span>
-                  <span style={{ fontSize:10.5, fontWeight:700, color:col }}>{ds.uroven}</span>
+                  <span style={{ fontSize:10.5, fontWeight:700, color:levelCol }}>{ds.uroven}</span>
                 </div>
               );
             })}
