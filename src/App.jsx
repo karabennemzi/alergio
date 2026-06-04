@@ -443,12 +443,10 @@ function weatherDriver(day, prevRain) {
 
 async function fetchWeather(city) {
   const [lat, lon] = CITY_COORDS[city] || [48.15, 17.11];
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
-    + `&daily=temperature_2m_max,precipitation_sum,windspeed_10m_max,cloudcover_mean,weathercode`
-    + `&hourly=temperature_2m,precipitation,windspeed_10m,cloudcover,relative_humidity_2m`
-    + `&forecast_days=7&timezone=Europe%2FBratislava`;
+  // Vercel proxy — vyhýba sa CORS + retry logika na serveri
+  const url = `/api/weather?lat=${lat}&lon=${lon}`;
   const res = await fetch(url);
-  if (!res.ok) throw new Error("Open-Meteo chyba");
+  if (!res.ok) throw new Error("Počasie nedostupné");
   const data = await res.json();
   const d = data.daily;
   const h = data.hourly;
