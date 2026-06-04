@@ -982,8 +982,8 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
   const trendArrow  = trendDown ? "↓" : trendUp ? "↑" : "→";
   const trendLabel  = trendDown ? "Zajtra lepšie" : trendUp ? "Zajtra horšie" : "Zajtra podobne";
 
-  const rc  = COL[todayRiziko] || "#3A7D44";
-  const rbg = BG[todayRiziko]  || "#f9fafb";
+  const rc  = COL[S2L[todayPerc]]  || "#3A7D44"; // S2L = ženský rod = kľúč v COL
+  const rbg = BG[S2L[todayPerc]]   || "#f9fafb";
 
   // Warning threshold from SENS_THRESHOLD
   const warnAt   = SENS_THRESHOLD[sens] ?? 3;
