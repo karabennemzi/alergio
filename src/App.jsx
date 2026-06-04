@@ -1013,52 +1013,62 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
           </div>
 
           <div className="top-grid" style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16, marginBottom:16 }}>
-            <div className="card" style={{ padding:24, background:`linear-gradient(135deg,${rbg},${T.card})`, border:`1px solid ${rc}20` }}>
-              {/* Sensitivity badge */}
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-                <div className="lbl" style={{ marginBottom:0 }}>Celkové riziko · dnes</div>
-                <div style={{ fontSize:9.5, padding:"2px 7px", borderRadius:20,
-                  background: sens==="vysoká"?"#fef2f2": sens==="nízka"?"#f0fdf4":"#f8faff",
-                  color: sens==="vysoká"?"#dc2626": sens==="nízka"?"#16a34a":"#6b7280",
-                  border: `1px solid ${sens==="vysoká"?"#fecaca": sens==="nízka"?"#bbf7d0":"#e2e8f0"}`,
+            <div className="card" style={{
+              padding:24,
+              background: `linear-gradient(160deg, ${rbg} 0%, ${T.card} 65%)`,
+              border:`2px solid ${rc}50`,
+              boxShadow:`0 4px 24px ${rc}20`,
+            }}>
+              {/* Header: label + sensitivity badge */}
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:rc, textTransform:"uppercase", letterSpacing:1 }}>
+                  Celkové riziko · dnes
+                </div>
+                <div style={{ fontSize:9.5, padding:"2px 8px", borderRadius:20,
+                  background:`${rc}15`, color:rc,
+                  border:`1px solid ${rc}35`,
                   fontWeight:600, textTransform:"uppercase", letterSpacing:.5 }}>
                   {sens==="vysoká"?"⚡ Vysoká citlivosť": sens==="nízka"?"😌 Nízka citlivosť":"😐 Stredná citlivosť"}
                 </div>
               </div>
-              {/* Main score — color shifted for high sensitivity */}
-              <div style={{ display:"flex", alignItems:"baseline", gap:10, marginBottom:10 }}>
-                <div style={{ fontSize:28, fontWeight:700, color:rc, letterSpacing:"-1px" }}>
-                  {todayRiziko}
-                  {sens !== "stredná" && todayPerc !== todayMax && (
-                    <span style={{ fontSize:10, fontWeight:400, color:T.textFaint, marginLeft:5 }}>
-                      (merané: {S2L[todayMax]})
-                    </span>
+
+              {/* Big risk label */}
+              <div style={{ fontSize:32, fontWeight:800, color:rc, letterSpacing:"-1px", lineHeight:1, marginBottom:12 }}>
+                {todayRiziko}
+                {sens !== "stredná" && todayPerc !== todayMax && (
+                  <span style={{ fontSize:11, fontWeight:400, color:rc, opacity:.6, marginLeft:6 }}>
+                    (merané: {S2L[todayMax]})
+                  </span>
+                )}
+              </div>
+
+              {/* Dot progress bar */}
+              <Dots score={todayPerc} color={rc}/>
+
+              {/* Trend arrow + tomorrow */}
+              <div style={{ display:"flex", alignItems:"center", gap:10, marginTop:12, marginBottom:12,
+                padding:"8px 12px", borderRadius:10,
+                background:`${rc}10`, border:`1px solid ${rc}25` }}>
+                <span style={{ fontSize:18, fontWeight:800, color:trendColor }}>{trendArrow}</span>
+                <div>
+                  <div style={{ fontSize:12, fontWeight:600, color:trendColor }}>{trendLabel}</div>
+                  {tomorrowMax > 0 && (
+                    <div style={{ fontSize:11, color:T.textMuted, marginTop:1 }}>
+                      Zajtra: <span style={{ fontWeight:600, color:COL[S2L[tomorrowMax]]||T.textMuted }}>{S2L_N[tomorrowMax]}</span>
+                      {trendDiff !== 0 && (
+                        <span style={{ marginLeft:4, color:trendColor, fontSize:10 }}>
+                          ({trendDiff>0?"+":""}{trendDiff.toFixed(1)} bod)
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
-                {/* Tomorrow trend */}
-                <div style={{ display:"flex", alignItems:"center", gap:4, padding:"3px 8px",
-                  background:`${trendColor}14`, borderRadius:20, border:`1px solid ${trendColor}30` }}>
-                  <span style={{ fontSize:13, fontWeight:700, color:trendColor }}>{trendArrow}</span>
-                  <span style={{ fontSize:10, fontWeight:600, color:trendColor }}>{trendLabel}</span>
-                </div>
               </div>
-              <Dots score={todayPerc} color={rc}/>
-              {/* Tomorrow preview */}
-              {tomorrowMax > 0 && (
-                <div style={{ marginTop:8, fontSize:11, color:T.textFaint }}>
-                  Zajtra: <span style={{ fontWeight:600, color:COL[S2L[tomorrowMax]]||T.textMuted }}>{S2L_N[tomorrowMax]}</span>
-                  {trendDiff !== 0 && <span style={{ marginLeft:4, color:trendColor }}>({trendDiff>0?"+":""}{trendDiff.toFixed(1)})</span>}
-                </div>
-              )}
-              {/* Sensitivity-based warning */}
-              {sensWarn && (
-                <div style={{ marginTop:10, padding:"8px 10px", background:`${rc}15`, borderRadius:8,
-                  fontSize:11.5, color:rc, lineHeight:1.5, fontWeight:500 }}>
-                  {sensWarn}
-                </div>
-              )}
-              {/* Outdoor message */}
-              <div style={{ marginTop:8, fontSize:11, color:T.textMuted, lineHeight:1.4, fontStyle:"italic" }}>
+
+              {/* Advice text */}
+              <div style={{ fontSize:11.5, color:rc, lineHeight:1.55, fontWeight:500,
+                padding:"8px 12px", borderRadius:9,
+                background:`${rc}08`, borderLeft:`3px solid ${rc}` }}>
                 {sensAdvice}
               </div>
             </div>
