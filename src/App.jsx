@@ -231,7 +231,6 @@ const PROGNOZA = {
 
 // Citlivosť ovplyvňuje prah príznakov, nie koncentráciu peľu
 // Pri vysokej citlivosti zobrazíme varovanie aj pri nižšej hladine
-const SENS_MULT = { "nízka":1.0, "stredná":1.0, "vysoká":1.0 };
 const SENS_THRESHOLD = { "nízka": 4, "stredná": 3, "vysoká": 2 };
 // SENS_THRESHOLD = od akého skóre dostane upozornenie "rizikové pre teba"
 
@@ -568,19 +567,45 @@ function calcBestWorstTime(dayData, city = "", chosenIds = [], sens = "stredná"
     return vals.reduce((a,b)=>a+b,0) / vals.length;
   });
 
+  // Denný kontext — celkový dážď ovplyvňuje VŠETKY hodiny dna
+  const dailyTotal = hourly.reduce((s, h) => s + (h.rain || 0), 0);
+
+  // Pre peľové alergény: denný dážď vypláchne peľ z ovzdušia na celý deň
+  const dayPollenCtx = dailyTotal > 15 ? 0.06 :
+                       dailyTotal > 8  ? 0.14 :
+                       dailyTotal > 3  ? 0.35 :
+                       dailyTotal > 1  ? 0.65 : 1.00;
+
+  // Pre huby: dážď + vlhkosť zvyšuje spóry
+  const dayFungiCtx  = dailyTotal > 8  ? 1.50 :
+                       dailyTotal > 3  ? 1.35 :
+                       dailyTotal > 1  ? 1.20 : 1.00;
+
+  // Určí či je alergén spóra húb alebo peľ
+  const isFungiProfile = chosenIds.includes("huby") && chosenIds.length === 1;
+
   // Vypočítaj hodinové riziko
   const scores = hourly.map(h => {
     const base = compositeProfile[h.hour] ?? 0.5;
 
-    // Dážď
-    let rainMod = 1.0;
-    if (h.rain > 2.0)       rainMod = 0.04;
-    else if (h.rain > 0.8)  rainMod = 0.20;
-    else if (h.rain > 0.2)  rainMod = 0.50;
-
-    // FIX 4: Burst 1-2h po zastavení dažďa
-    if (rainStopsAt > 0 && (h.hour === rainStopsAt + 1 || h.hour === rainStopsAt + 2)) {
-      rainMod = Math.min(rainMod * 1.50, 1.40);
+    // Hodinový dážď — používame AJ denný kontext
+    let rainMod;
+    if (isFungiProfile) {
+      // Huby: pri daždi stúpajú
+      rainMod = h.rain > 1.0 ? 1.30 :
+                h.rain > 0.3 ? 1.15 : 1.00;
+      // Burst po daždi
+      if (rainStopsAt > 0 && (h.hour === rainStopsAt+1 || h.hour === rainStopsAt+2))
+        rainMod = 1.80;
+    } else {
+      // Peľ: hodinový dážď + denný kontext
+      const hourRain = h.rain > 2.0 ? 0.05 :
+                       h.rain > 0.8 ? 0.20 :
+                       h.rain > 0.2 ? 0.55 : 1.00;
+      rainMod = hourRain * dayPollenCtx;
+      // Burst po daždi (peľ uvoľnený po vlhkosti)
+      if (rainStopsAt > 0 && (h.hour === rainStopsAt+1 || h.hour === rainStopsAt+2) && dailyTotal < 5)
+        rainMod = Math.min(rainMod * 1.35, 1.30);
     }
 
     // Teplota
@@ -599,15 +624,18 @@ function calcBestWorstTime(dayData, city = "", chosenIds = [], sens = "stredná"
     // Oblačnosť
     const cloudMod = 1.0 - (h.clouds / 100) * 0.22;
 
-    // FIX 5: Vlhkosť (ak dostupná)
+    // Vlhkosť
     const humMod = h.humidity !== undefined
       ? (h.humidity > 90 ? 0.15 : h.humidity > 80 ? 0.50 : h.humidity > 70 ? 0.80 : 1.00)
       : 1.0;
 
-    // FIX 6: Kotlinová inverzia — ráno (5-10h) +25% pre BA, NR, TN
-    const inversionMod = (isValley && h.hour >= 5 && h.hour <= 10) ? 1.25 : 1.0;
+    // Kotlinová inverzia (len pre peľ, nie huby)
+    const inversionMod = (!isFungiProfile && isValley && h.hour >= 5 && h.hour <= 10) ? 1.25 : 1.0;
 
-    return base * rainMod * tempMod * windMod * cloudMod * humMod * inversionMod;
+    // Pre huby aplikuj denný context namiesto humidity redukcie
+    const finalFungiCtx = isFungiProfile ? dayFungiCtx : 1.0;
+
+    return base * rainMod * tempMod * windMod * cloudMod * humMod * inversionMod * finalFungiCtx;
   });
 
   // Nájdi najlepší a najhorší 2-hodinový blok (mimo noci 23:00-05:00)
@@ -697,7 +725,6 @@ function calcBestWorstTime(dayData, city = "", chosenIds = [], sens = "stredná"
 
 function calcHybrid(city, ids, sens, weatherDays) {
   const cd = CITY_DATA[city] || {};
-  const sm = SENS_MULT[sens] || 1.0;
 
   return ids.map(id => {
     const b = POLLEN_DATA[id]; if (!b) return null;
@@ -743,12 +770,11 @@ const BG  = { "Veľmi nízka":"#f0fdf4","Nízka":"#f7fee7","Stredná":"#fefce8",
 
 function calcForecast(city, ids, sens) {
   const cd = CITY_DATA[city] || {};
-  const sm = SENS_MULT[sens] || 1;
   const allergens = ids.map(id => {
     const b = POLLEN_DATA[id]; if (!b) return null;
     // Use city-specific measured score if available, else base score
     const baseScore = (cd[id] !== undefined) ? cd[id] : b.skore;
-    const s = Math.min(5, Math.round(baseScore * sm));
+    const s = Math.min(5, Math.round(baseScore));
     // City-specific pelZrn label
     const pelZrnCity = id==="borovica" ? (cd.pelBor||b.pelZrn)
                      : id==="travy"    ? (cd.pelTra||b.pelZrn)
@@ -765,26 +791,63 @@ function calcForecast(city, ids, sens) {
   const avg = Math.round(allergens.reduce((t,a) => t+a.s, 0) / Math.max(allergens.length,1));
   const total = Math.max(max, avg);
   const days = DAYS.map((den,i) => { const m = Math.max(...allergens.map(a=>a.outlook[i]||1)); return {den,s:m,riziko:S2L[m]}; });
-  let warn = null;
-  if (sens==="vysoká" && total>=4) warn = "Vysoká citlivosť + vysoký peľ: majte po ruke záchranné lieky a zvážte obmedzenie pobytu vonku.";
-  else if (total===5) warn = "Extrémne vysoké koncentrácie — zvážte obmedzenie pobytu vonku na minimum.";
-  const recs = buildRecs(ids, sens, max);
-  return { allergens, total, riziko: S2L[total], days, warn, recs };
+  return { allergens, total, riziko: S2L[total], days };
 }
 
-function buildRecs(ids, sens, max) {
+// Odporúčania na základe REÁLNYCH skóre (mesto + počasie) + dnešného počasia
+// allergenScores = [{id, score}], todayWeather = {temp, rain, wind, ...} | null
+function buildRecs(allergenScores, sens, todayWeather) {
   const r = [];
-  const hasTravy = ids.includes("travy") && POLLEN_DATA.travy.skore >= 3;
-  const hasBor = ids.includes("borovica") && POLLEN_DATA.borovica.skore >= 4;
-  if (max >= 4) r.push("Zostaňte vnútri počas ranných hodín (6:00–10:00) — koncentrácie peľu sú vtedy najvyššie.");
-  if (max >= 4) r.push("Zatvorte okná v noci a ráno. Používajte klimatizáciu s peľovým filtrom.");
-  if (sens==="vysoká" && max>=3) r.push("Poraďte sa s lekárom o úprave antihistaminickej liečby — sezóna vrcholí.");
-  if (hasTravy) r.push("Vyhýbajte sa trávnatým plochám a parkom. Po príchode domov sa osprchujte a prezlečte.");
-  if (hasBor) r.push("Po daždi môže dôjsť k náhlemu uvoľneniu peľu borovíc — vyčkajte hodinu vo vnútri.");
-  if (ids.includes("huby") && POLLEN_DATA.huby.skore >= 3) r.push("Spóry húb sú vysoké — vyhýbajte sa vlhkým miestam, kompostom a listovej pôde.");
-  if (r.length < 3) r.push("Najlepší čas na vonkajšie aktivity je podvečer (18:00–21:00), keď koncentrácie klesajú.");
-  if (r.length < 4) r.push("Noste wrap-around slnečné okuliare vonku — zredukujú kontakt peľu s očami až o 30 %.");
-  return r.slice(0,5);
+  const max     = allergenScores.reduce((m,a) => Math.max(m, a.score), 0);
+  const scoreOf = id => (allergenScores.find(a => a.id === id)?.score) || 0;
+  const has     = id => allergenScores.some(a => a.id === id);
+
+  const raining = todayWeather && todayWeather.rain > 1.5;
+  const hot     = todayWeather && todayWeather.temp > 25;
+  const windy   = todayWeather && todayWeather.wind > 25;
+
+  // 1. Počasovo-špecifické rady (najvyššia priorita — aktuálne a konkrétne)
+  if (raining && scoreOf("huby") < 4) {
+    r.push("Dnes prší — peľ je vyplavený zo vzduchu. Ideálny deň na vetranie aj prechádzku.");
+  }
+  if (raining && has("huby") && scoreOf("huby") >= 3) {
+    r.push("Napriek dažďu sú spóry húb vysoké — vyhýbajte sa vlhkým miestam, lístiu a kompostu.");
+  }
+  if (hot && !raining && max >= 3) {
+    r.push("Teplý suchý deň zvyšuje koncentráciu peľu — plánujte vonkajšie aktivity na podvečer.");
+  }
+  if (windy && !raining && max >= 3) {
+    r.push("Silný vietor roznáša peľ na väčšie vzdialenosti — noste okuliare a po návrate sa osprchujte.");
+  }
+
+  // 2. Skóre-špecifické rady (podľa reálnych hodnôt dnes)
+  if (max >= 4) {
+    r.push("Zatvorte okná ráno (6:00–10:00), keď sú koncentrácie najvyššie. Vetrajte radšej po daždi alebo večer.");
+  }
+  if (sens === "vysoká" && max >= 3) {
+    r.push("Pri vašej citlivosti majte po ruke antihistaminiká a zvážte obmedzenie pobytu vonku.");
+  }
+  if (has("travy") && scoreOf("travy") >= 3) {
+    r.push("Trávy sú aktívne — vyhýbajte sa čerstvo kosenej tráve a lúkam, hlavne ráno.");
+  }
+  if (has("borovica") && scoreOf("borovica") >= 4) {
+    r.push("Vysoký peľ borovice — utrite prach a peľové povlaky z parapetov a áut vlhkou handrou.");
+  }
+  if (has("ambrozia") && scoreOf("ambrozia") >= 3) {
+    r.push("Ambrózia je veľmi agresívny alergén — pri pobyte vonku zvážte respirátor FFP2.");
+  }
+
+  // 3. Doplnkové rady ak je zoznam krátky
+  if (max <= 2 && r.length < 2) {
+    r.push("Nízke koncentrácie peľu — vhodný čas na vonkajšie aktivity aj vetranie.");
+  }
+  if (r.length < 3) {
+    r.push("Po príchode domov sa osprchujte a prezlečte — peľ ostáva na vlasoch a oblečení.");
+  }
+  if (r.length < 4) {
+    r.push("Sušte bielizeň vnútri — vonku na nej ulpieva peľ.");
+  }
+  return r.slice(0, 5);
 }
 
 function Dots({ score, color }) {
@@ -1003,6 +1066,12 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
   const todayPerc   = perceivedScore(todayMax, sens);
   const todayRiziko = S2L_N[todayPerc] || S2L[todayPerc] || forecast?.riziko || "—";
   const sensAdvice  = sensitivityAdvice(todayPerc, sens);
+
+  // Odporúčania na základe reálnych skóre (mesto+počasie) + dnešného počasia
+  const todayScores = hybridToday
+    ? hybridToday.map(h => ({ id: h.id, score: h.days[0]?.score || 0 }))
+    : (forecast?.allergens || []).map(a => ({ id: a.id, score: a.s || 0 }));
+  const recs = buildRecs(todayScores, sens, weather?.[0] || null);
 
   // Zajtra — reálne + vnímané
   const tomorrowMax  = hybridToday
@@ -1353,7 +1422,7 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
             <div className="card" style={{ padding:24 }}>
               <div className="lbl" style={{ marginBottom:16 }}>Odporúčania na dnes</div>
               <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-                {forecast.recs.map((r,i) => (
+                {recs.map((r,i) => (
                   <div key={i} style={{ display:"flex", gap:12, alignItems:"flex-start" }}>
                     <div style={{ width:22, height:22, minWidth:22, background:"#F0FDF4", borderRadius:6, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:"#166534", marginTop:1 }}>{i+1}</div>
                     <div style={{ fontSize:13.5, color:T.textSub, lineHeight:1.6 }}>{r}</div>
@@ -1428,6 +1497,7 @@ function Sidebar({ page, setPage, city, setCity, chosen, toggle, sens, setSens, 
       <div style={{ padding:"12px 12px 0" }}>
         {[
           { id:"forecast", label:"Dnešná predpoveď", icon:"📊" },
+          { id:"mapa",     label:"Mapa Slovenska", icon:"🗺️" },
           { id:"almanach", label:"Peľový kalendár", icon:"📅" },
         ].map(n => (
           <button key={n.id} onClick={()=>setPage(n.id)} style={{
@@ -1843,6 +1913,249 @@ function CookieBanner({ onConsent, T }) {
   );
 }
 
+// ── Mapa SR — pozície miest (projekcia lon/lat) ──
+const SK_PATH = "M37.6,270.6 L2.8,197.4 L9.8,168.5 L44.6,129.4 L86.4,134.5 L149.1,115.7 L190.9,52.8 L239.7,18.7 L281.5,15.3 L327.5,35.7 L365.2,1.7 L411.1,66.4 L455.7,49.4 L518.5,39.1 L574.2,49.4 L623.0,27.2 L671.8,39.1 L720.6,86.8 L798.6,90.2 L741.5,175.3 L734.5,209.4 L678.7,185.5 L595.1,188.9 L553.3,175.3 L490.6,223.0 L434.8,243.4 L372.1,260.4 L302.4,280.9 L267.6,294.5 L190.9,265.5 L128.2,314.9 L79.4,311.5 L37.6,270.6 Z";
+const SK_MAP_POS = {
+  "Bratislava":      [38.7, 248.7],
+  "Trnava":          [105.7, 209.8],
+  "Trenčín":         [169.2, 121.8],
+  "Nitra":           [175.1, 221.8],
+  "Žilina":          [266.1, 65.8],
+  "Banská Bystrica": [323.8, 148.2],
+  "Prešov":          [614.6, 104.1],
+  "Košice":          [617.6, 152.1],
+};
+// Ktoré mestá majú reálne merané dáta vs odhad
+const MEASURED_CITIES = new Set(["Bratislava","Žilina","Nitra"]);
+
+function MapaPage({ chosen, sens, toggle, T }) {
+  if (!T) T = LIGHT;
+  const [hover, setHover] = useState(null);
+  const VW = 800, VH = 320;
+
+  // Pre každé mesto spočítaj riziko pre vybrané alergény + trend na zajtra
+  const cityRisks = CITIES.map(city => {
+    const fc = calcForecast(city, chosen.length ? chosen : ["travy"], sens);
+    const realMax = fc.total;
+    const perc = perceivedScore(realMax, sens);
+    // Zajtrajší výhľad — z fenologického outlook (deň 0 = zajtra)
+    const tomorrowMax = fc.days?.[0]?.s ?? realMax;
+    const trendDiff = tomorrowMax - realMax;
+    const trend = trendDiff > 0.4 ? "up" : trendDiff < -0.4 ? "down" : "flat";
+    return {
+      city,
+      pos: SK_MAP_POS[city],
+      score: realMax,
+      perc,
+      uroven: S2L[realMax] || "—",
+      color: COL[S2L[realMax]] || "#94a3b8",
+      allergens: fc.allergens,
+      measured: MEASURED_CITIES.has(city),
+      trend,
+      tomorrowUroven: S2L[tomorrowMax] || "—",
+    };
+  });
+
+  return (
+    <div className="almanach-page" style={{ padding:"32px 36px", overflowX:"hidden", background:T.bg, minHeight:"100vh", transition:"background .3s" }}>
+      {/* Header */}
+      <div style={{ marginBottom:24 }}>
+        <div style={{ fontSize:13, color:T.textFaint, marginBottom:4 }}>Mapa Slovenska</div>
+        <h1 style={{ fontSize:22, fontWeight:700, color:T.text, letterSpacing:"-.3px", marginBottom:8 }}>
+          Peľová situácia na Slovensku
+        </h1>
+        <p style={{ fontSize:14, color:T.textMuted, maxWidth:640, lineHeight:1.6 }}>
+          Celkové peľové riziko pre vaše alergény podľa monitorovacích staníc ÚVZ SR.
+          {chosen.length === 0 && " Vyberte alergény v predpovedi pre presnejšiu mapu."}
+        </p>
+      </div>
+
+      {/* Interactive allergen selector — funguje na mobile aj desktope */}
+      <div style={{ marginBottom:18 }}>
+        <div style={{ fontSize:11, color:T.textFaint, marginBottom:7, textTransform:"uppercase", letterSpacing:.5 }}>
+          Vaše alergény {chosen.length === 0 && "— vyberte aspoň jeden"}
+        </div>
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+          {Object.entries(POLLEN_DATA).map(([id,d]) => {
+            const active = chosen.includes(id);
+            return (
+              <button key={id} onClick={()=>toggle(id)} style={{
+                display:"inline-flex", alignItems:"center", gap:4, padding:"5px 11px",
+                border:`1.5px solid ${active?"#3A7D44":T.chipBorder}`, borderRadius:100,
+                fontSize:12.5, fontWeight: active?600:400,
+                color: active?"#166534":T.textMuted,
+                background: active?T.accentLight:T.chipBg,
+                cursor:"pointer", transition:"all .15s", fontFamily:"'Inter',sans-serif",
+              }}>
+                {d.emoji} {d.short}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Map */}
+      <div className="card" style={{ padding:"20px", marginBottom:20, position:"relative" }}>
+        <svg viewBox={`0 0 ${VW} ${VH}`} width="100%" style={{ display:"block" }}>
+          {/* Slovakia outline */}
+          <path d={SK_PATH} fill={T===DARK?"#1a2e1c":"#f0fdf4"}
+            stroke={T===DARK?"#2d4a30":"#86efac"} strokeWidth="1.5" strokeLinejoin="round"/>
+
+          {/* City dots */}
+          {cityRisks.map(c => {
+            const [x,y] = c.pos;
+            const isHover = hover === c.city;
+            const r = 7 + c.score * 2.2; // veľkosť podľa rizika
+            return (
+              <g key={c.city} style={{ cursor:"pointer" }}
+                onMouseEnter={()=>setHover(c.city)} onMouseLeave={()=>setHover(null)}>
+                {/* Glow */}
+                <circle cx={x} cy={y} r={r+5} fill={c.color} opacity={isHover?0.25:0.12}/>
+                {/* Main dot */}
+                <circle cx={x} cy={y} r={r} fill={c.color}
+                  stroke="#fff" strokeWidth="2" opacity={0.92}/>
+                {/* Measured indicator ring */}
+                {c.measured && (
+                  <circle cx={x} cy={y} r={r+3} fill="none"
+                    stroke={c.color} strokeWidth="1.5" strokeDasharray="2,2" opacity={0.6}/>
+                )}
+                {/* Trend arrow — vpravo hore od bodu */}
+                {c.trend !== "flat" && (
+                  <g transform={`translate(${x + r + 2}, ${y - r - 2})`}>
+                    <circle cx="0" cy="0" r="7"
+                      fill={c.trend==="down" ? "#16a34a" : "#dc2626"}
+                      stroke="#fff" strokeWidth="1.5"/>
+                    <text x="0" y="0.5" textAnchor="middle" dominantBaseline="middle"
+                      fontSize="10" fontWeight="700" fill="#fff">
+                      {c.trend==="down" ? "↓" : "↑"}
+                    </text>
+                  </g>
+                )}
+                {/* City label */}
+                <text x={x} y={y - r - 6} textAnchor="middle"
+                  fontSize="12" fontWeight={isHover?"700":"600"}
+                  fill={isHover?c.color:T.text}>{c.city}</text>
+              </g>
+            );
+          })}
+        </svg>
+
+        {/* Hover detail */}
+        {hover && (() => {
+          const c = cityRisks.find(x => x.city === hover);
+          if (!c) return null;
+          const [x,y] = c.pos;
+          return (
+            <div style={{
+              position:"absolute",
+              left:`${(x/VW)*100}%`, top:`${(y/VH)*100}%`,
+              transform: x > VW*0.6 ? "translate(-105%, 10px)" : "translate(10px, 10px)",
+              background:T.card, border:`1.5px solid ${c.color}50`,
+              borderRadius:10, padding:"10px 12px",
+              boxShadow:"0 4px 20px rgba(0,0,0,.15)",
+              minWidth:150, pointerEvents:"none", zIndex:10,
+            }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                marginBottom:6, paddingBottom:6, borderBottom:`1px solid ${T.divider}` }}>
+                <span style={{ fontSize:13, fontWeight:700, color:T.text }}>{c.city}</span>
+                <span style={{ fontSize:11, fontWeight:700, color:c.color }}>{c.uroven}</span>
+              </div>
+              {c.allergens.slice(0,5).map(a => (
+                <div key={a.id} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
+                  <div style={{ width:7, height:7, borderRadius:"50%",
+                    background:COL[a.uroven]||"#888", flexShrink:0 }}/>
+                  <span style={{ fontSize:11, color:T.textSub, flex:1 }}>{a.emoji} {a.short}</span>
+                  <span style={{ fontSize:11, fontWeight:600, color:COL[a.uroven]||"#888" }}>{a.uroven}</span>
+                </div>
+              ))}
+              {/* Zajtrajší trend */}
+              <div style={{ marginTop:6, paddingTop:6, borderTop:`1px solid ${T.divider}`,
+                display:"flex", alignItems:"center", gap:5, fontSize:10.5, fontWeight:600,
+                color: c.trend==="down"?"#16a34a":c.trend==="up"?"#dc2626":T.textMuted }}>
+                <span>{c.trend==="down"?"↓":c.trend==="up"?"↑":"→"}</span>
+                <span>Zajtra: {c.tomorrowUroven}
+                  {c.trend==="down"?" (zlepšenie)":c.trend==="up"?" (zhoršenie)":" (bez zmeny)"}
+                </span>
+              </div>
+              <div style={{ marginTop:5, fontSize:9.5, color:T.textFaint }}>
+                {c.measured ? "📡 Monitorovacia stanica" : "≈ Odhad z okolitých staníc"}
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* Legend */}
+      <div className="card" style={{ padding:"18px 20px" }}>
+        <div className="lbl" style={{ marginBottom:12 }}>Legenda mapy</div>
+
+        {/* Risk scale */}
+        <div style={{ marginBottom:16 }}>
+          <div style={{ fontSize:11, color:T.textFaint, marginBottom:6, textTransform:"uppercase", letterSpacing:.5 }}>
+            Úroveň peľového rizika
+          </div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            {[["Veľmi nízka","0–5"],["Nízka","6–30"],["Stredná","31–50"],["Vysoká","51–150"],["Veľmi vysoká",">150"]].map(([lbl,rng]) => (
+              <div key={lbl} style={{ display:"flex", alignItems:"center", gap:5 }}>
+                <div style={{ width:14, height:14, borderRadius:"50%", background:COL[lbl] }}/>
+                <span style={{ fontSize:11.5, color:T.textSub }}>{lbl}</span>
+                <span style={{ fontSize:10, color:T.textFaint }}>({rng} z/m³)</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Dot size + measured */}
+        <div style={{ display:"flex", gap:24, flexWrap:"wrap", marginBottom:16 }}>
+          <div>
+            <div style={{ fontSize:11, color:T.textFaint, marginBottom:6, textTransform:"uppercase", letterSpacing:.5 }}>
+              Veľkosť bodu
+            </div>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <svg width="60" height="24">
+                <circle cx="8" cy="12" r="4" fill={T.textFaint}/>
+                <circle cx="30" cy="12" r="7" fill={T.textFaint}/>
+                <circle cx="52" cy="12" r="10" fill={T.textFaint}/>
+              </svg>
+              <span style={{ fontSize:11, color:T.textSub }}>nízke → vysoké riziko</span>
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize:11, color:T.textFaint, marginBottom:6, textTransform:"uppercase", letterSpacing:.5 }}>
+              Typ dát
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+              <span style={{ fontSize:11, color:T.textSub }}>📡 = monitorovacia stanica (merané)</span>
+              <span style={{ fontSize:11, color:T.textSub }}>≈ = odhad z okolitých staníc</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Allergens shown */}
+        <div>
+          <div style={{ fontSize:11, color:T.textFaint, marginBottom:6, textTransform:"uppercase", letterSpacing:.5 }}>
+            Sledované alergény
+          </div>
+          <div style={{ display:"flex", gap:"5px 12px", flexWrap:"wrap" }}>
+            {Object.entries(POLLEN_DATA).map(([id,d]) => (
+              <span key={id} style={{ fontSize:11.5, color: chosen.includes(id)?T.text:T.textPlaceholder,
+                fontWeight: chosen.includes(id)?600:400 }}>
+                {d.emoji} {d.short}{chosen.includes(id)?" ✓":""}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginTop:14, paddingTop:12, borderTop:`1px solid ${T.divider}`,
+          fontSize:10.5, color:T.textFaint, lineHeight:1.5 }}>
+          Mapa zobrazuje celkové riziko pre vaše vybrané alergény. Iba Bratislava, Žilina a Nitra
+          majú priame merania — ostatné mestá sú odhadnuté z najbližších staníc a textových správ ÚVZ SR.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DynamicStyles({ T }) {
   return (
     <style>{`
@@ -2053,6 +2366,7 @@ export default function App() {
           )}
 
           {page === "forecast" && <ForecastPage city={city} chosen={chosen} sens={sens} forecast={forecast} setForecast={setForecast} weather={weather} weatherLoading={weatherLoading} T={T}/>}
+          {page === "mapa" && <MapaPage chosen={chosen} sens={sens} toggle={toggle} T={T}/>}
           {page === "almanach" && <AlmanachPage T={T}/>}
         </main>
       </div>
@@ -2061,6 +2375,7 @@ export default function App() {
       <nav className="mobile-nav">
         {[
           { id:"forecast", label:"Predpoveď", icon:"📊" },
+          { id:"mapa",     label:"Mapa", icon:"🗺️" },
           { id:"almanach", label:"Kalendár", icon:"📅" },
         ].map(n => (
           <button key={n.id} className={`mobile-nav-btn${page===n.id?" on":""}`}
