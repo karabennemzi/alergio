@@ -2067,23 +2067,65 @@ function MapaPage({ chosen, sens, toggle, setCity, setPage, T }) {
   const [hover, setHover]         = useState(null); // názov kraja
   const [selKraj, setSelKraj]     = useState(null); // rozkliknutý kraj
   const [hoverTown, setHoverTown] = useState(null);
+  const [mapDay, setMapDay]       = useState(0);    // zvolený deň (0 = dnes)
+  const [wx, setWx]               = useState({});   // stanica → 7-dňové počasie
+  const [wxLoading, setWxLoading] = useState(false);
   const [VW, VH] = MAP_VIEWBOX;
 
-  // Riziko pre každý kraj — z baseline jeho stanice + vybrané alergény
+  // Počasie pre monitorovacie stanice (6) — kvôli hybridnému modelu po dňoch
+  useEffect(() => {
+    let alive = true;
+    setWxLoading(true);
+    Promise.all(STATION_LIST.map(s =>
+      fetchWeather(s).then(w => [s, w]).catch(() => [s, null])
+    )).then(pairs => {
+      if (!alive) return;
+      const m = {};
+      pairs.forEach(([s, w]) => { if (w) m[s] = w; });
+      setWx(m);
+    }).finally(() => { if (alive) setWxLoading(false); });
+    return () => { alive = false; };
+  }, []);
+
+  const anyWx = Object.values(wx)[0];
+  const nDays = anyWx?.length || 1;
+  const dIdx  = Math.min(mapDay, nDays - 1);
+  const dObj  = anyWx?.[dIdx];
+  const dLabel = dIdx===0 ? "Dnes" : dIdx===1 ? "Zajtra" : (dObj ? SK_DAYS[new Date(dObj.date).getDay()] : `+${dIdx} dní`);
+  const dDate  = dObj ? new Date(dObj.date).toLocaleDateString("sk-SK",{day:"numeric",month:"numeric"}) : "";
+
+  // Riziko pre každý kraj pre ZVOLENÝ DEŇ — hybridný model (stanica × počasie × fenológia).
+  // Kým sa počasie nenačíta, fallback na statický baseline (calcForecast).
+  const cids = chosen.length ? chosen : ["travy"];
   const krajRisks = KRAJE_GEO.map(k => {
     const station = KRAJ_STATION[k.name];
-    const fc = calcForecast(station, chosen.length ? chosen : ["travy"], sens);
-    const realMax = fc.total;
-    const tomorrowMax = fc.days?.[0]?.s ?? realMax;
-    const diff = tomorrowMax - realMax;
+    const sWx = wx[station];
+    let dayMax, nextMax, allergens;
+
+    if (sWx?.length) {
+      const hyb = calcHybrid(station, cids, sens, sWx);
+      dayMax  = Math.max(0, ...hyb.map(h => h.days[dIdx]?.score || 0));
+      nextMax = Math.max(0, ...hyb.map(h => h.days[Math.min(dIdx+1, sWx.length-1)]?.score || 0));
+      allergens = hyb.map(h => {
+        const b = POLLEN_DATA[h.id]; const sc = h.days[dIdx]?.score || 0;
+        return { id:h.id, short:b.short, emoji:b.emoji, uroven:S2L[sc]||"Veľmi nízka", s:sc };
+      }).sort((a,b)=>b.s-a.s);
+    } else {
+      const fc = calcForecast(station, cids, sens);
+      dayMax  = fc.total;
+      nextMax = fc.days?.[0]?.s ?? fc.total;
+      allergens = fc.allergens;
+    }
+
+    const diff  = nextMax - dayMax;
     const trend = diff > 0.4 ? "up" : diff < -0.4 ? "down" : "flat";
     return {
-      ...k, station, score: realMax,
-      uroven: S2L[realMax] || "—",
-      color: COL[S2L[realMax]] || "#94a3b8",
-      allergens: fc.allergens,
+      ...k, station, score: dayMax,
+      uroven: S2L[dayMax] || "—",
+      color: COL[S2L[dayMax]] || "#94a3b8",
+      allergens,
       stationInKraj: TOWN_KRAJ[station] === k.name,
-      trend, tomorrowUroven: S2L[tomorrowMax] || "—",
+      trend, tomorrowUroven: S2L[nextMax] || "—",
     };
   });
   const byName = Object.fromEntries(krajRisks.map(k => [k.name, k]));
@@ -2098,7 +2140,7 @@ function MapaPage({ chosen, sens, toggle, setCity, setPage, T }) {
         </h1>
         <p style={{ fontSize:14, color:T.textMuted, maxWidth:660, lineHeight:1.6 }}>
           Klikni na kraj pre jeho okresné mestá, potom na mesto pre detailnú predpoveď.
-          Farba kraja = celkové riziko pre tvoje alergény podľa jeho monitorovacej stanice.
+          Farba kraja = celkové riziko pre tvoje alergény pre zvolený deň (podľa jeho monitorovacej stanice a nášho modelu).
           {chosen.length === 0 && " Vyber alergény nižšie pre presnejšiu mapu."}
         </p>
       </div>
@@ -2127,6 +2169,38 @@ function MapaPage({ chosen, sens, toggle, setCity, setPage, T }) {
         </div>
       </div>
 
+      {/* Prepínač dní — kraje sa prefarbia podľa modelu pre zvolený deň */}
+      <div className="card" style={{ padding:"10px 16px", marginBottom:12, display:"flex",
+        alignItems:"center", justifyContent:"space-between", gap:10, flexWrap:"wrap" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:9, minWidth:0 }}>
+          <span style={{ fontSize:15 }}>🗓️</span>
+          <div>
+            <div style={{ fontSize:12.5, fontWeight:700, color:T.text }}>Predpoveď po krajoch</div>
+            <div style={{ fontSize:10.5, color:T.textFaint }}>
+              {wxLoading ? "⏳ načítavam model…" : "model: stanica × počasie × fenológia"}
+            </div>
+          </div>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <button aria-label="Predošlý deň" onClick={()=>setMapDay(d=>Math.max(0,d-1))} disabled={dIdx<=0}
+            style={{ width:30, height:30, borderRadius:8, border:`1px solid ${T.cardBorder}`,
+              background:T.card, color: dIdx<=0?T.textPlaceholder:T.textSub,
+              cursor: dIdx<=0?"default":"pointer", fontSize:16, lineHeight:1, padding:0,
+              display:"flex", alignItems:"center", justifyContent:"center",
+              opacity: dIdx<=0?0.4:1, fontFamily:"'Inter',sans-serif" }}>‹</button>
+          <div style={{ minWidth:92, textAlign:"center" }}>
+            <div style={{ fontSize:13.5, fontWeight:700, color:T.text, lineHeight:1.1 }}>{dLabel}</div>
+            {dDate && <div style={{ fontSize:10, color:T.textFaint }}>{dDate}</div>}
+          </div>
+          <button aria-label="Ďalší deň" onClick={()=>setMapDay(d=>Math.min(nDays-1,d+1))} disabled={dIdx>=nDays-1}
+            style={{ width:30, height:30, borderRadius:8, border:`1px solid ${T.cardBorder}`,
+              background:T.card, color: dIdx>=nDays-1?T.textPlaceholder:T.textSub,
+              cursor: dIdx>=nDays-1?"default":"pointer", fontSize:16, lineHeight:1, padding:0,
+              display:"flex", alignItems:"center", justifyContent:"center",
+              opacity: dIdx>=nDays-1?0.4:1, fontFamily:"'Inter',sans-serif" }}>›</button>
+        </div>
+      </div>
+
       {/* Map */}
       <div className="card" style={{ padding:"20px", marginBottom:20, position:"relative" }}>
         <svg viewBox={`0 0 ${VW} ${VH}`} width="100%" style={{ display:"block" }}>
@@ -2134,7 +2208,7 @@ function MapaPage({ chosen, sens, toggle, setCity, setPage, T }) {
           {krajRisks.map(k => {
             const isHover = hover === k.name;
             const isSel   = selKraj === k.name;
-            const op = isSel ? 0.55 : isHover ? 0.45 : 0.30;
+            const op = isSel ? 0.94 : isHover ? 0.86 : 0.78;
             return (
               <path key={k.name} d={k.path} fill={k.color} fillOpacity={op}
                 stroke={isSel||isHover ? k.color : (T===DARK?"#2d4a30":"#cbd5e1")}
@@ -2154,8 +2228,8 @@ function MapaPage({ chosen, sens, toggle, setCity, setPage, T }) {
                   fill={T.text} stroke={T===DARK?"#0d1a0e":"#fff"} strokeWidth="3" paintOrder="stroke">
                   {k.name}
                 </text>
-                <text x={k.cx} y={k.cy+11} textAnchor="middle" fontSize="10" fontWeight="600"
-                  fill={k.color} stroke={T===DARK?"#0d1a0e":"#fff"} strokeWidth="2.5" paintOrder="stroke">
+                <text x={k.cx} y={k.cy+11} textAnchor="middle" fontSize="10" fontWeight="700"
+                  fill={T.text} stroke={T===DARK?"#0d1a0e":"#fff"} strokeWidth="2.5" paintOrder="stroke">
                   {k.uroven} {k.trend==="down"?"↓":k.trend==="up"?"↑":""}
                 </text>
               </g>
@@ -2221,7 +2295,7 @@ function MapaPage({ chosen, sens, toggle, setCity, setPage, T }) {
                 display:"flex", alignItems:"center", gap:5, fontSize:10.5, fontWeight:600,
                 color: k.trend==="down"?"#16a34a":k.trend==="up"?"#dc2626":T.textMuted }}>
                 <span>{k.trend==="down"?"↓":k.trend==="up"?"↑":"→"}</span>
-                <span>Zajtra: {k.tomorrowUroven}</span>
+                <span>{dIdx===0 ? "Zajtra" : "Ďalší deň"}: {k.tomorrowUroven}</span>
               </div>
               <div style={{ marginTop:5, fontSize:9.5, color:T.textFaint }}>
                 📡 Stanica: {k.station}{k.stationInKraj?"":" (susedný kraj)"} · klikni pre mestá
@@ -2272,7 +2346,7 @@ function MapaPage({ chosen, sens, toggle, setCity, setPage, T }) {
           <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
             {[["Veľmi nízka","0–5"],["Nízka","6–30"],["Stredná","31–50"],["Vysoká","51–150"],["Veľmi vysoká",">150"]].map(([lbl,rng]) => (
               <div key={lbl} style={{ display:"flex", alignItems:"center", gap:5 }}>
-                <div style={{ width:14, height:14, borderRadius:4, background:COL[lbl], opacity:.55 }}/>
+                <div style={{ width:14, height:14, borderRadius:4, background:COL[lbl] }}/>
                 <span style={{ fontSize:11.5, color:T.textSub }}>{lbl}</span>
                 <span style={{ fontSize:10, color:T.textFaint }}>({rng} z/m³)</span>
               </div>
@@ -2291,8 +2365,8 @@ function MapaPage({ chosen, sens, toggle, setCity, setPage, T }) {
           <div>
             <div style={{ fontSize:11, color:T.textFaint, marginBottom:6, textTransform:"uppercase", letterSpacing:.5 }}>Šípka pri kraji</div>
             <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
-              <span style={{ fontSize:11, color:"#16a34a" }}>↓ = zajtra zlepšenie</span>
-              <span style={{ fontSize:11, color:"#dc2626" }}>↑ = zajtra zhoršenie</span>
+              <span style={{ fontSize:11, color:"#16a34a" }}>↓ = ďalší deň lepšie</span>
+              <span style={{ fontSize:11, color:"#dc2626" }}>↑ = ďalší deň horšie</span>
             </div>
           </div>
         </div>
