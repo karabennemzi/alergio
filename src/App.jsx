@@ -538,7 +538,7 @@ const BASE_HOURLY_POLLEN = HOURLY_PROFILES.travy;
 
 // Mestá v kotlinách — ranná teplotná inverzia zachytáva peľ
 
-function calcBestWorstTime(dayData, city = "", chosenIds = [], sens = "stredná") {
+function calcBestWorstTime(dayData, city = "", chosenIds = [], sens = "stredná", dayScore = 5) {
   const hourly = dayData?.hourly;
   if (!hourly || hourly.length < 24) {
     return {
@@ -639,6 +639,13 @@ function calcBestWorstTime(dayData, city = "", chosenIds = [], sens = "stredná"
     return base * rainMod * tempMod * windMod * cloudMod * humMod * inversionMod * finalFungiCtx;
   });
 
+  // ── Naškálovanie na REÁLNU úroveň peľu dňa (z nášho modelu, 0–5) ──
+  // Hodinový profil dáva len TVAR (ktoré hodiny sú najsilnejšie); absolútnu výšku
+  // (a tým aj farbu/„vyhnúť sa") určuje skóre dňa. Nízky peľ → žiadna červená.
+  const dayLvl = Math.max(0, Math.min(5, dayScore)) / 5;
+  const profMax = Math.max(...scores, 0.001);
+  for (let i = 0; i < scores.length; i++) scores[i] = (scores[i] / profMax) * dayLvl;
+
   // Nájdi najlepší a najhorší 2-hodinový blok (mimo noci 23:00-05:00)
   const DAYTIME = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22];
   const EVENING_SAFE = [18,19,20,21,22,23];
@@ -710,6 +717,13 @@ function calcBestWorstTime(dayData, city = "", chosenIds = [], sens = "stredná"
   const nowLevel   = nowScore < 0.3 ? "nízke" : nowScore < 0.6 ? "stredné" : nowScore < 0.85 ? "vysoké" : "veľmi vysoké";
   const nowColor   = nowScore < 0.3 ? "#16a34a" : nowScore < 0.6 ? "#ca8a04" : nowScore < 0.85 ? "#ea580c" : "#dc2626";
 
+  // Severita najhoršieho bloku podľa ABSOLÚTNeho skóre (po naškálovaní úrovňou dňa)
+  const sevColor = s => s < 0.30 ? "#16a34a" : s < 0.55 ? "#ca8a04" : s < 0.80 ? "#ea580c" : "#dc2626";
+  const sevLevel = s => s < 0.30 ? "nízky"   : s < 0.55 ? "stredný" : s < 0.80 ? "vysoký"  : "veľmi vysoký";
+  const worstColor = sevColor(worstMax);
+  const worstLevel = sevLevel(worstMax);
+  const worstHigh  = worstMax >= 0.55; // pod touto hranicou nedávame červené „Vyhnúť sa"
+
   return {
     best:        `${fmt(longestStart)}–${fmt(longestEnd)}`,
     worst:       `${fmt(worstStart)}–${fmt(worstEnd)}`,
@@ -719,6 +733,7 @@ function calcBestWorstTime(dayData, city = "", chosenIds = [], sens = "stredná"
     fromHourly:  true,
     worstScore:  Math.round(worstMax * 100),
     bestScore:   Math.round(bestMin * 100),
+    worstColor, worstLevel, worstHigh, dayLvl,
     nowScore, nowLevel, nowColor, nowHour,
     hourlyScores: scores,  // expose for mini timeline
   };
@@ -1269,7 +1284,9 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
                 const nDays = weather?.length || 1;
                 const dayIdx = Math.min(czDay, nDays - 1);
                 const isToday = dayIdx === 0;
-                const bw = calcBestWorstTime(weather?.[dayIdx], city, chosen, sens);
+                const dayHybrid = (weather?.length && chosen?.length) ? calcHybrid(city, chosen, sens, weather) : null;
+                const dayModelMax = dayHybrid ? Math.max(0, ...dayHybrid.map(h => h.days[dayIdx]?.score || 0)) : 5;
+                const bw = calcBestWorstTime(weather?.[dayIdx], city, chosen, sens, dayModelMax);
                 const hasHourly = bw.hourlyScores?.length > 0;
                 const dObj = weather?.[dayIdx];
                 const dLabel = dayIdx===0 ? "Dnes" : dayIdx===1 ? "Zajtra" : (dObj ? SK_DAYS[new Date(dObj.date).getDay()] : "");
@@ -1386,9 +1403,11 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
                       </div>
                       <div>
                         <div style={{ fontSize:10, color:T.textFaint, textTransform:"uppercase",
-                          letterSpacing:.5, marginBottom:3 }}>⚠️ Vyhnúť sa</div>
-                        <div style={{ fontSize:15, fontWeight:700, color:"#dc2626" }}>{bw.worst}</div>
-                        <div style={{ fontSize:10.5, color:T.textMuted, marginTop:3, lineHeight:1.4 }}>{bw.worstReason}</div>
+                          letterSpacing:.5, marginBottom:3 }}>{bw.worstHigh ? "⚠️ Vyhnúť sa" : "🕐 Najviac peľu"}</div>
+                        <div style={{ fontSize:15, fontWeight:700, color: bw.worstColor || "#dc2626" }}>{bw.worst}</div>
+                        <div style={{ fontSize:10.5, color:T.textMuted, marginTop:3, lineHeight:1.4 }}>
+                          {bw.worstHigh ? bw.worstReason : `Aj tak len ${bw.worstLevel || "nízky"} peľ — pokojný deň`}
+                        </div>
                       </div>
                     </div>
                   </div>
