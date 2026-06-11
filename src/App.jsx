@@ -470,6 +470,8 @@ async function fetchWeather(city) {
     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
     `&daily=temperature_2m_max,precipitation_sum,windspeed_10m_max,cloudcover_mean,weathercode` +
     `&hourly=temperature_2m,precipitation,windspeed_10m,cloudcover,relative_humidity_2m` +
+    // DWD ICON seamless: ICON-D2 (2,2 km) na najbližšie dni + ICON-EU/global na zvyšok — jemnejšie než SHMÚ ALADIN (4,5 km)
+    `&models=icon_seamless` +
     `&forecast_days=7&timezone=Europe%2FBratislava`;
 
   const controller = new AbortController();
@@ -1048,9 +1050,15 @@ function AlmanachPage({ T }) {
 }
 
 /* ══ FORECAST PAGE ══ */
-function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weatherLoading, T }) {
+function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weatherLoading, kraj, setCity, setKraj, setSens, toggle, T }) {
   if (!T) T = LIGHT;
   const today = new Date().toLocaleDateString("sk-SK",{weekday:"long",year:"numeric",month:"long",day:"numeric"});
+  // Deň zvolený vo widgete „Čas vonku" (0 = dnes, posúvateľné po dňoch)
+  const [czDay, setCzDay] = useState(0);
+  // Mobilný panel nastavení (kraj/mesto/citlivosť/alergény) priamo na stránke predpovede
+  const [setOpen, setSetOpen] = useState(false);
+  const mSel = { width:"100%", padding:"8px 12px", border:`1.5px solid ${T.inputBorder}`, borderRadius:9, fontSize:13.5, fontFamily:"'Inter',sans-serif", color:T.text, background:T.input, outline:"none", appearance:"none", WebkitAppearance:"none", backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236B7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E\")", backgroundRepeat:"no-repeat", backgroundPosition:"right 10px center", paddingRight:28 };
+  const mLbl = { fontSize:10.5, fontWeight:600, color:T.lbl, textTransform:"uppercase", letterSpacing:.6, display:"block", marginBottom:6 };
   // Hybrid scores for today — use calcHybrid if weather available, else calcForecast
   const hybridToday = (weather?.length && chosen?.length)
     ? calcHybrid(city, chosen, sens, weather)
@@ -1113,6 +1121,85 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
               onMouseLeave={e=>{e.currentTarget.style.borderColor=T.cardBorder;}}>
               ↺ Obnoviť
             </button>
+          </div>
+
+          {/* ── Mobilný panel nastavení (len mobile) — kraj/mesto/citlivosť/alergény bez návratu späť ── */}
+          <div className="fc-mobile-settings" style={{ marginBottom:16 }}>
+            <div className="card" style={{ overflow:"hidden" }}>
+              <button onClick={()=>setSetOpen(o=>!o)} style={{
+                width:"100%", background:"none", border:"none", cursor:"pointer", padding:"12px 14px",
+                display:"flex", alignItems:"center", gap:10, fontFamily:"'Inter',sans-serif", textAlign:"left" }}>
+                <span style={{ fontSize:16 }}>⚙️</span>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:T.text }}>Upraviť predpoveď</div>
+                  <div style={{ fontSize:11, color:T.textMuted, marginTop:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                    📍 {city} · {chosen.length} {chosen.length===1?"alergén":chosen.length>=2&&chosen.length<=4?"alergény":"alergénov"} · citlivosť {sens}
+                  </div>
+                </div>
+                <span style={{ fontSize:13, color:T.textFaint, transition:"transform .2s",
+                  display:"inline-block", transform: setOpen?"rotate(180deg)":"rotate(0deg)" }}>▼</span>
+              </button>
+
+              {setOpen && (
+                <div style={{ padding:"4px 14px 16px", borderTop:`1px solid ${T.divider}`, animation:"fadeUp .2s ease both" }}>
+                  {/* Kraj + Mesto */}
+                  <div style={{ display:"flex", gap:10, marginTop:12 }}>
+                    <div style={{ flex:1 }}>
+                      <span style={mLbl}>Kraj</span>
+                      <select style={mSel} value={kraj} onChange={e=>setKraj(e.target.value)}>
+                        {KRAJ_LIST.map(k=><option key={k}>{k}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ flex:1 }}>
+                      <span style={mLbl}>Okresné mesto</span>
+                      <select style={mSel} value={city} onChange={e=>setCity(e.target.value)}>
+                        {(TOWNS_BY_KRAJ[kraj]||[]).map(t=><option key={t.name}>{t.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ fontSize:11, color:T.textFaint, marginTop:6, display:"flex", alignItems:"center", gap:5 }}>
+                    <span>{isStationTown(city) ? "📡" : "≈"}</span>
+                    <span>{isStationTown(city) ? "Monitorovacia stanica" : `Odhad zo stanice ${townStation(city)}`}</span>
+                  </div>
+
+                  {/* Citlivosť */}
+                  <div style={{ marginTop:14 }}>
+                    <span style={mLbl}>Citlivosť</span>
+                    <div style={{ display:"flex", gap:6 }}>
+                      {[["nízka","Nízka"],["stredná","Stredná"],["vysoká","Vysoká"]].map(([v,l])=>(
+                        <button key={v} onClick={()=>setSens(v)} style={{ flex:1, padding:"8px 4px",
+                          border:`1.5px solid ${sens===v?"#3A7D44":T.inputBorder}`, borderRadius:8,
+                          fontSize:12.5, fontWeight: sens===v?600:400, fontFamily:"'Inter',sans-serif", cursor:"pointer",
+                          background: sens===v?T.accentLight:T.input, color: sens===v?"#166534":T.textMuted, transition:"all .15s" }}>{l}</button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Alergény */}
+                  <div style={{ marginTop:14 }}>
+                    <span style={mLbl}>Moje alergie</span>
+                    <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                      {Object.entries(POLLEN_DATA).map(([id,d]) => {
+                        const active = chosen.includes(id);
+                        return (
+                          <button key={id} onClick={()=>toggle(id)} style={{
+                            display:"inline-flex", alignItems:"center", gap:4, padding:"6px 11px",
+                            border:`1.5px solid ${active?"#3A7D44":T.chipBorder}`, borderRadius:100,
+                            fontSize:12.5, fontWeight: active?600:400,
+                            color: active?"#166534":T.textMuted, background: active?T.accentLight:T.chipBg,
+                            cursor:"pointer", transition:"all .15s", fontFamily:"'Inter',sans-serif" }}>
+                            {d.emoji} {d.short}{active?" ✓":""}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {chosen.length===0 && (
+                      <div style={{ fontSize:11, color:"#dc2626", marginTop:7 }}>Vyber aspoň jeden alergén.</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="top-grid" style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16, marginBottom:16 }}>
@@ -1179,8 +1266,14 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
             </div>
             <div className="card" style={{ padding:22 }}>
               {(() => {
-                const bw = calcBestWorstTime(weather?.[0], city, chosen, sens);
+                const nDays = weather?.length || 1;
+                const dayIdx = Math.min(czDay, nDays - 1);
+                const isToday = dayIdx === 0;
+                const bw = calcBestWorstTime(weather?.[dayIdx], city, chosen, sens);
                 const hasHourly = bw.hourlyScores?.length > 0;
+                const dObj = weather?.[dayIdx];
+                const dLabel = dayIdx===0 ? "Dnes" : dayIdx===1 ? "Zajtra" : (dObj ? SK_DAYS[new Date(dObj.date).getDay()] : "");
+                const dDate  = dObj ? new Date(dObj.date).toLocaleDateString("sk-SK",{day:"numeric",month:"numeric"}) : "";
 
                 // Score → color for timeline bars
                 const barColor = s =>
@@ -1194,11 +1287,32 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
 
                 return (
                   <div>
-                    {/* Header row */}
-                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                    {/* Header row: title + prepínač dní */}
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
                       <div className="lbl" style={{ marginBottom:0 }}>Čas vonku</div>
-                      {/* Now indicator */}
-                      {hasHourly && (
+                      <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                        <button aria-label="Predošlý deň" onClick={()=>setCzDay(d=>Math.max(0,d-1))} disabled={dayIdx<=0}
+                          style={{ width:24, height:24, borderRadius:7, border:`1px solid ${T.cardBorder}`,
+                            background:T.card, color: dayIdx<=0?T.textPlaceholder:T.textSub,
+                            cursor: dayIdx<=0?"default":"pointer", fontSize:14, lineHeight:1, padding:0,
+                            display:"flex", alignItems:"center", justifyContent:"center",
+                            opacity: dayIdx<=0?0.4:1, fontFamily:"'Inter',sans-serif" }}>‹</button>
+                        <div style={{ minWidth:74, textAlign:"center" }}>
+                          <div style={{ fontSize:12, fontWeight:700, color:T.text, lineHeight:1.1 }}>{dLabel}</div>
+                          {dDate && <div style={{ fontSize:9.5, color:T.textFaint }}>{dDate}</div>}
+                        </div>
+                        <button aria-label="Ďalší deň" onClick={()=>setCzDay(d=>Math.min(nDays-1,d+1))} disabled={dayIdx>=nDays-1}
+                          style={{ width:24, height:24, borderRadius:7, border:`1px solid ${T.cardBorder}`,
+                            background:T.card, color: dayIdx>=nDays-1?T.textPlaceholder:T.textSub,
+                            cursor: dayIdx>=nDays-1?"default":"pointer", fontSize:14, lineHeight:1, padding:0,
+                            display:"flex", alignItems:"center", justifyContent:"center",
+                            opacity: dayIdx>=nDays-1?0.4:1, fontFamily:"'Inter',sans-serif" }}>›</button>
+                      </div>
+                    </div>
+
+                    {/* Now indicator — len pre dnešok */}
+                    {hasHourly && isToday && (
+                      <div style={{ display:"flex", marginBottom:10 }}>
                         <div style={{ display:"flex", alignItems:"center", gap:5, padding:"3px 8px",
                           background:`${bw.nowColor}15`, borderRadius:20, border:`1px solid ${bw.nowColor}30` }}>
                           <div style={{ width:6, height:6, borderRadius:"50%", background:bw.nowColor }}/>
@@ -1206,8 +1320,8 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
                             Teraz {bw.nowHour}:00 — {bw.nowLevel}
                           </span>
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
                     {/* Hourly mini-timeline */}
                     {hasHourly && (
@@ -1216,7 +1330,7 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
                           {HOURS.map((hr, idx) => {
                             const s    = bw.hourlyScores[hr] ?? 0;
                             const col  = barColor(s);
-                            const isNow = hr === bw.nowHour;
+                            const isNow = isToday && hr === bw.nowHour;
                             const barH = Math.max(4, Math.round(s * 28));
                             return (
                               <div key={hr} style={{ flex:1, display:"flex", flexDirection:"column",
@@ -1237,8 +1351,8 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
                         <div style={{ display:"flex", gap:2, marginTop:2 }}>
                           {HOUR_LABELS.map((lbl,i) => (
                             <div key={i} style={{ flex:1, textAlign:"center",
-                              fontSize:8.5, color: HOURS[i]===bw.nowHour?"#3A7D44":T.textPlaceholder,
-                              fontWeight: HOURS[i]===bw.nowHour?700:400 }}>
+                              fontSize:8.5, color: (isToday && HOURS[i]===bw.nowHour)?"#3A7D44":T.textPlaceholder,
+                              fontWeight: (isToday && HOURS[i]===bw.nowHour)?700:400 }}>
                               {lbl}
                             </div>
                           ))}
@@ -2278,6 +2392,7 @@ export default function App() {
         ::-webkit-scrollbar { width:4px; } ::-webkit-scrollbar-track { background:transparent; } ::-webkit-scrollbar-thumb { background:#D1D5DB; border-radius:2px; }
         .card { border-radius:14px; }
         .lbl { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.8px; display:block; margin-bottom:8px; }
+        .fc-mobile-settings { display:none; }
 
         /* ── DESKTOP ── */
         .layout { display:flex; max-width:1440px; margin:0 auto; min-height:100vh; }
@@ -2354,6 +2469,7 @@ export default function App() {
 
           /* Forecast page padding */
           .forecast-page { padding:16px 14px 24px !important; }
+          .fc-mobile-settings { display:block !important; }
           .almanach-page { padding:16px 14px 24px !important; }
 
           /* Legend wrap */
@@ -2387,7 +2503,7 @@ export default function App() {
             </div>
           )}
 
-          {page === "forecast" && <ForecastPage city={city} chosen={chosen} sens={sens} forecast={forecast} setForecast={setForecast} weather={weather} weatherLoading={weatherLoading} T={T}/>}
+          {page === "forecast" && <ForecastPage city={city} chosen={chosen} sens={sens} forecast={forecast} setForecast={setForecast} weather={weather} weatherLoading={weatherLoading} kraj={kraj} setCity={setCity} setKraj={chooseKraj} setSens={setSens} toggle={toggle} T={T}/>}
           {page === "mapa" && <MapaPage chosen={chosen} sens={sens} toggle={toggle} setCity={setCity} setPage={setPage} T={T}/>}
           {page === "almanach" && <AlmanachPage T={T}/>}
         </main>
