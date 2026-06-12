@@ -313,15 +313,23 @@ const FENO = {
   ambrozia: [0.00, 0.00, 0.00, 0.02, 0.06, 0.15, 0.30], // začína v júli
 };
 
-function wmoToEmoji(code) {
-  if (code === 0) return "☀️";
-  if (code <= 2)  return "🌤️";
-  if (code <= 3)  return "☁️";
-  if (code <= 48) return "🌫️";
-  if (code <= 67) return "🌧️";
-  if (code <= 77) return "🌨️";
-  if (code <= 82) return "🌦️";
-  return "⛈️";
+// Ikona dňa — denný weathercode z Open-Meteo často hlási „najhoršie" počasie dňa
+// (aj krátku popoludňajšiu prehánku), preto by slnečný deň dostal dažďovú ikonu.
+// Rozhodujeme preto kombináciou: reálne zrážky + oblačnosť; kód len pre búrku/sneh/hmlu.
+function dayEmoji(code = 1, rain = 0, clouds = 50) {
+  rain = rain || 0;
+  clouds = (clouds === undefined || clouds === null) ? 50 : clouds;
+  if (code >= 95)                                              return rain >= 0.3 ? "⛈️" : "🌦️"; // búrka
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "🌨️"; // sneženie
+  if (code === 45 || code === 48)                              return "🌫️"; // hmla
+  if (rain >= 5)                                               return "🌧️"; // výdatný dážď
+  if (rain >= 1)                                               return "🌦️"; // dážď / prehánky
+  if (rain >= 0.2)                                             return "🌦️"; // mrholenie / slabé prehánky
+  // bez zrážok → podľa oblačnosti
+  if (clouds < 20)                                             return "☀️";
+  if (clouds < 55)                                             return "🌤️";
+  if (clouds < 85)                                             return "⛅";
+  return "☁️";
 }
 
 // Výpočet počasieho faktora pre peľ
@@ -504,7 +512,7 @@ async function fetchWeather(city) {
       wind:   d.windspeed_10m_max[i]   || 10,
       clouds: d.cloudcover_mean[i]     || 30,
       wmo:    d.weathercode[i]         || 1,
-      emoji:  wmoToEmoji(d.weathercode[i] || 1),
+      emoji:  dayEmoji(d.weathercode[i], d.precipitation_sum[i], d.cloudcover_mean[i]),
       hourly: hourlyByDay[i] || [],
     }));
     weatherCacheSet(city, result);
@@ -1138,85 +1146,6 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
             </button>
           </div>
 
-          {/* ── Mobilný panel nastavení (len mobile) — kraj/mesto/citlivosť/alergény bez návratu späť ── */}
-          <div className="fc-mobile-settings" style={{ marginBottom:16 }}>
-            <div className="card" style={{ overflow:"hidden" }}>
-              <button onClick={()=>setSetOpen(o=>!o)} style={{
-                width:"100%", background:"none", border:"none", cursor:"pointer", padding:"12px 14px",
-                display:"flex", alignItems:"center", gap:10, fontFamily:"'Inter',sans-serif", textAlign:"left" }}>
-                <span style={{ fontSize:16 }}>⚙️</span>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:13, fontWeight:700, color:T.text }}>Upraviť predpoveď</div>
-                  <div style={{ fontSize:11, color:T.textMuted, marginTop:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
-                    📍 {city} · {chosen.length} {chosen.length===1?"alergén":chosen.length>=2&&chosen.length<=4?"alergény":"alergénov"} · citlivosť {sens}
-                  </div>
-                </div>
-                <span style={{ fontSize:13, color:T.textFaint, transition:"transform .2s",
-                  display:"inline-block", transform: setOpen?"rotate(180deg)":"rotate(0deg)" }}>▼</span>
-              </button>
-
-              {setOpen && (
-                <div style={{ padding:"4px 14px 16px", borderTop:`1px solid ${T.divider}`, animation:"fadeUp .2s ease both" }}>
-                  {/* Kraj + Mesto */}
-                  <div style={{ display:"flex", gap:10, marginTop:12 }}>
-                    <div style={{ flex:1 }}>
-                      <span style={mLbl}>Kraj</span>
-                      <select style={mSel} value={kraj} onChange={e=>setKraj(e.target.value)}>
-                        {KRAJ_LIST.map(k=><option key={k}>{k}</option>)}
-                      </select>
-                    </div>
-                    <div style={{ flex:1 }}>
-                      <span style={mLbl}>Okresné mesto</span>
-                      <select style={mSel} value={city} onChange={e=>setCity(e.target.value)}>
-                        {(TOWNS_BY_KRAJ[kraj]||[]).map(t=><option key={t.name}>{t.name}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <div style={{ fontSize:11, color:T.textFaint, marginTop:6, display:"flex", alignItems:"center", gap:5 }}>
-                    <span>{isStationTown(city) ? "📡" : "≈"}</span>
-                    <span>{isStationTown(city) ? "Monitorovacia stanica" : `Odhad zo stanice ${townStation(city)}`}</span>
-                  </div>
-
-                  {/* Citlivosť */}
-                  <div style={{ marginTop:14 }}>
-                    <span style={mLbl}>Citlivosť</span>
-                    <div style={{ display:"flex", gap:6 }}>
-                      {[["nízka","Nízka"],["stredná","Stredná"],["vysoká","Vysoká"]].map(([v,l])=>(
-                        <button key={v} onClick={()=>setSens(v)} style={{ flex:1, padding:"8px 4px",
-                          border:`1.5px solid ${sens===v?"#3A7D44":T.inputBorder}`, borderRadius:8,
-                          fontSize:12.5, fontWeight: sens===v?600:400, fontFamily:"'Inter',sans-serif", cursor:"pointer",
-                          background: sens===v?T.accentLight:T.input, color: sens===v?"#166534":T.textMuted, transition:"all .15s" }}>{l}</button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Alergény */}
-                  <div style={{ marginTop:14 }}>
-                    <span style={mLbl}>Moje alergie</span>
-                    <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                      {Object.entries(POLLEN_DATA).map(([id,d]) => {
-                        const active = chosen.includes(id);
-                        return (
-                          <button key={id} onClick={()=>toggle(id)} style={{
-                            display:"inline-flex", alignItems:"center", gap:4, padding:"6px 11px",
-                            border:`1.5px solid ${active?"#3A7D44":T.chipBorder}`, borderRadius:100,
-                            fontSize:12.5, fontWeight: active?600:400,
-                            color: active?"#166534":T.textMuted, background: active?T.accentLight:T.chipBg,
-                            cursor:"pointer", transition:"all .15s", fontFamily:"'Inter',sans-serif" }}>
-                            {d.emoji} {d.short}{active?" ✓":""}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {chosen.length===0 && (
-                      <div style={{ fontSize:11, color:"#dc2626", marginTop:7 }}>Vyber aspoň jeden alergén.</div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
           <div className="top-grid" style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16, marginBottom:16 }}>
             <div style={{
               padding:24,
@@ -1604,112 +1533,193 @@ function ForecastPage({ city, chosen, sens, forecast, setForecast, weather, weat
 }
 
 /* ══ SIDEBAR (shared) ══ */
-function Sidebar({ page, setPage, city, setCity, kraj, setKraj, chosen, toggle, sens, setSens, go, T, dark, setDark }) {
-  const selSt = { width:"100%", padding:"8px 12px", border:`1.5px solid ${T.inputBorder}`, borderRadius:9, fontSize:13.5, fontFamily:"\'Inter\',sans-serif", color:T.text, background:T.input, outline:"none", appearance:"none", WebkitAppearance:"none", backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath fill=\'%236B7280\' d=\'M6 8L1 3h10z\'/%3E%3C/svg%3E\")", backgroundRepeat:"no-repeat", backgroundPosition:"right 10px center", paddingRight:28 };
-  const lblSt = { fontSize:11, fontWeight:600, color:T.lbl, textTransform:"uppercase", letterSpacing:.8, display:"block", marginBottom:7 };
+/* ══ Spoločné ovládače nastavení (intro / horná lišta / mobil) ══ */
+function SettingsControls({ kraj, setKraj, city, setCity, sens, setSens, chosen, toggle, T, variant = "stack" }) {
+  const selSt = { padding:"8px 12px", border:`1.5px solid ${T.inputBorder}`, borderRadius:9, fontSize:13.5, fontFamily:"'Inter',sans-serif", color:T.text, background:T.input, outline:"none", appearance:"none", WebkitAppearance:"none", backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236B7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E\")", backgroundRepeat:"no-repeat", backgroundPosition:"right 10px center", paddingRight:28 };
+  const lblSt = { fontSize:10.5, fontWeight:600, color:T.lbl, textTransform:"uppercase", letterSpacing:.6, display:"block", marginBottom:6 };
+  const row = variant === "row";
+
+  const sensBtns = (
+    <div style={{ display:"flex", gap:6 }}>
+      {[["nízka","Nízka"],["stredná","Stredná"],["vysoká","Vysoká"]].map(([v,l])=>(
+        <button key={v} onClick={()=>setSens(v)} style={{ flex: row?"0 0 auto":1, padding:"8px 12px",
+          border:`1.5px solid ${sens===v?"#3A7D44":T.inputBorder}`, borderRadius:8,
+          fontSize:12.5, fontWeight: sens===v?600:400, fontFamily:"'Inter',sans-serif", cursor:"pointer",
+          background: sens===v?T.accentLight:T.input, color: sens===v?"#166534":T.textMuted, transition:"all .15s", whiteSpace:"nowrap" }}>{l}</button>
+      ))}
+    </div>
+  );
+
+  const chips = (
+    <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+      {Object.entries(POLLEN_DATA).map(([id,d]) => {
+        const active = chosen.includes(id);
+        return (
+          <button key={id} onClick={()=>toggle(id)} style={{
+            display:"inline-flex", alignItems:"center", gap:4, padding:"6px 11px",
+            border:`1.5px solid ${active?"#3A7D44":T.chipBorder}`, borderRadius:100,
+            fontSize:12.5, fontWeight: active?600:400,
+            color: active?"#166534":T.textMuted, background: active?T.accentLight:T.chipBg,
+            cursor:"pointer", transition:"all .15s", fontFamily:"'Inter',sans-serif" }}>
+            {d.emoji} {d.short}{active?" ✓":""}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const stationHint = (
+    <span style={{ fontSize:11, color:T.textFaint, display:"inline-flex", alignItems:"center", gap:4, whiteSpace:"nowrap" }}>
+      <span>{isStationTown(city) ? "📡" : "≈"}</span>
+      <span>{isStationTown(city) ? "merané" : townStation(city)}</span>
+    </span>
+  );
+
+  if (row) {
+    return (
+      <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <select style={{ ...selSt, minWidth:150 }} value={kraj} onChange={e=>setKraj(e.target.value)}>
+            {KRAJ_LIST.map(k=><option key={k}>{k}</option>)}
+          </select>
+          <select style={{ ...selSt, minWidth:160 }} value={city} onChange={e=>setCity(e.target.value)}>
+            {(TOWNS_BY_KRAJ[kraj]||[]).map(t=><option key={t.name}>{t.name}</option>)}
+          </select>
+          {stationHint}
+        </div>
+        {sensBtns}
+        <div style={{ flex:1, minWidth:220 }}>{chips}</div>
+      </div>
+    );
+  }
+
   return (
-    <aside style={{ width:280, minWidth:280, background:T.sidebar, borderRight:`1px solid ${T.sidebarBorder}`, height:"100vh", position:"sticky", top:0, overflowY:"auto", display:"flex", flexDirection:"column", transition:"background .3s" }} className="sidebar-inner">
-      {/* Logo */}
-      <div style={{ padding:"24px 20px 16px", borderBottom:`1px solid ${T.sidebarBorder}` }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2 }}>
-          <span style={{ fontSize:20 }}>🌿</span>
-          <span style={{ fontSize:19, fontWeight:700, color:T.accent, letterSpacing:"-.3px" }}>Alergio</span>
+    <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+      <div style={{ display:"flex", gap:10 }}>
+        <div style={{ flex:1 }}>
+          <span style={lblSt}>Kraj</span>
+          <select style={{ ...selSt, width:"100%" }} value={kraj} onChange={e=>setKraj(e.target.value)}>
+            {KRAJ_LIST.map(k=><option key={k}>{k}</option>)}
+          </select>
         </div>
-        <div style={{ fontSize:11.5, color:T.textFaint }}>Peľová predpoveď pre Slovensko</div>
-        <button onClick={()=>setDark(d=>!d)} style={{
-          marginTop:10, display:"flex", alignItems:"center", gap:7, padding:"5px 10px",
-          background:T.toggleBg, border:`1px solid ${T.cardBorder}`, borderRadius:20,
-          fontSize:12, fontWeight:500, color:T.textMuted, cursor:"pointer",
-          fontFamily:"'Inter',sans-serif", transition:"all .2s",
-        }}>
-          <span>{T.toggleIcon}</span>
-          <span>{dark ? "Svetlý režim" : "Tmavý režim"}</span>
+        <div style={{ flex:1 }}>
+          <span style={lblSt}>Okresné mesto</span>
+          <select style={{ ...selSt, width:"100%" }} value={city} onChange={e=>setCity(e.target.value)}>
+            {(TOWNS_BY_KRAJ[kraj]||[]).map(t=><option key={t.name}>{t.name}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={{ fontSize:11, color:T.textFaint, display:"flex", alignItems:"center", gap:5, marginTop:-8 }}>
+        <span>{isStationTown(city) ? "📡" : "≈"}</span>
+        <span>{isStationTown(city) ? "Monitorovacia stanica" : `Odhad zo stanice ${townStation(city)}`}</span>
+      </div>
+      <div>
+        <span style={lblSt}>Citlivosť</span>
+        {sensBtns}
+      </div>
+      <div>
+        <span style={lblSt}>Moje alergie</span>
+        {chips}
+      </div>
+    </div>
+  );
+}
+
+/* ══ Intro obrazovka — vycentrovaná karta ══ */
+function IntroScreen({ kraj, setKraj, city, setCity, sens, setSens, chosen, toggle, go, T, dark, setDark }) {
+  return (
+    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center",
+      padding:"24px 16px 90px", background:T.bg, transition:"background .3s" }}>
+      <div className="card" style={{ width:"100%", maxWidth:480, padding:"28px 26px", position:"relative" }}>
+        <button onClick={()=>setDark(d=>!d)} aria-label="Prepnúť tému" style={{ position:"absolute", top:16, right:16,
+          width:34, height:34, borderRadius:20, border:`1px solid ${T.cardBorder}`, background:T.toggleBg,
+          cursor:"pointer", fontSize:15 }}>{T.toggleIcon}</button>
+        <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:5 }}>
+          <span style={{ fontSize:26 }}>🌿</span>
+          <span style={{ fontSize:23, fontWeight:700, color:T.accent, letterSpacing:"-.3px" }}>Alergio</span>
+        </div>
+        <p style={{ fontSize:13.5, color:T.textMuted, marginBottom:22, lineHeight:1.5, maxWidth:380 }}>
+          Peľová predpoveď pre Slovensko. Vyber si miesto, alergény a citlivosť — a uvidíš svoju predpoveď.
+        </p>
+        <SettingsControls kraj={kraj} setKraj={setKraj} city={city} setCity={setCity}
+          sens={sens} setSens={setSens} chosen={chosen} toggle={toggle} T={T} variant="stack"/>
+        <button disabled={!chosen.length} onClick={go} style={{ width:"100%", marginTop:22, padding:"13px",
+          background:"#1a3622", color:"#fff", border:"none", borderRadius:10, fontSize:14.5, fontWeight:600,
+          fontFamily:"'Inter',sans-serif", cursor: chosen.length?"pointer":"default", opacity: chosen.length?1:.4, transition:"all .15s" }}>
+          Zobraziť predpoveď →
         </button>
+        {!chosen.length && <div style={{ fontSize:11.5, color:"#dc2626", marginTop:8, textAlign:"center" }}>Vyber aspoň jeden alergén.</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ══ Horná lišta — záložky + nastavenia (desktop inline / mobil rozbaľovacie) ══ */
+function TopBar({ page, setPage, kraj, setKraj, city, setCity, sens, setSens, chosen, toggle, onNew, T, dark, setDark }) {
+  const [mOpen, setMOpen] = useState(false);
+  const tabs = [
+    { id:"forecast", label:"Predpoveď", icon:"📊" },
+    { id:"mapa",     label:"Mapa",      icon:"🗺️" },
+    { id:"almanach", label:"Kalendár",  icon:"📅" },
+  ];
+  const nAll = chosen.length;
+  const allWord = nAll===1 ? "alergén" : (nAll>=2 && nAll<=4 ? "alergény" : "alergénov");
+
+  return (
+    <header className="topbar" style={{ position:"sticky", top:0, zIndex:50,
+      background:T.navBg, borderBottom:`1px solid ${T.navBorder}`, transition:"background .3s" }}>
+      {/* Riadok 1: logo + záložky + téma */}
+      <div style={{ maxWidth:1440, margin:"0 auto", display:"flex", alignItems:"center", gap:10, padding:"9px 16px" }}>
+        <div onClick={onNew} title="Nové vyhľadávanie" style={{ display:"flex", alignItems:"center", gap:7, cursor:"pointer", flexShrink:0 }}>
+          <span style={{ fontSize:20 }}>🌿</span>
+          <span className="brand-label" style={{ fontSize:18, fontWeight:700, color:T.accent, letterSpacing:"-.3px" }}>Alergio</span>
+        </div>
+        <nav style={{ display:"flex", gap:4, flexShrink:0 }}>
+          {tabs.map(n => (
+            <button key={n.id} onClick={()=>setPage(n.id)} style={{
+              display:"flex", alignItems:"center", gap:6, padding:"7px 11px", borderRadius:8, border:"none",
+              cursor:"pointer", fontFamily:"'Inter',sans-serif", fontSize:13.5, fontWeight: page===n.id?600:400,
+              background: page===n.id ? T.accentLight : "transparent",
+              color: page===n.id ? T.accentText : T.textMuted, transition:"all .15s", whiteSpace:"nowrap" }}>
+              <span style={{ fontSize:15 }}>{n.icon}</span><span className="tab-label">{n.label}</span>
+            </button>
+          ))}
+        </nav>
+        <button onClick={()=>setDark(d=>!d)} aria-label="Prepnúť tému" style={{ marginLeft:"auto", flexShrink:0,
+          width:32, height:32, borderRadius:20, border:`1px solid ${T.cardBorder}`, background:T.toggleBg,
+          cursor:"pointer", fontSize:13 }}>{T.toggleIcon}</button>
       </div>
 
-      {/* Nav */}
-      <div style={{ padding:"12px 12px 0" }}>
-        {[
-          { id:"forecast", label:"Dnešná predpoveď", icon:"📊" },
-          { id:"mapa",     label:"Mapa Slovenska", icon:"🗺️" },
-          { id:"almanach", label:"Peľový kalendár", icon:"📅" },
-        ].map(n => (
-          <button key={n.id} onClick={()=>setPage(n.id)} style={{
-            width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px",
-            border:"none", borderRadius:8, cursor:"pointer", textAlign:"left", marginBottom:2,
-            background: page===n.id ? "#ECFDF5" : "transparent",
-            color: page===n.id ? "#166534" : "#6B7280",
-            fontFamily:"'Inter',sans-serif", fontSize:13.5, fontWeight: page===n.id ? 600 : 400,
-            transition:"all .15s",
-          }}>
-            <span style={{ fontSize:16 }}>{n.icon}</span>
-            {n.label}
-          </button>
-        ))}
+      {/* Desktop: nastavenia priamo v lište (živé) */}
+      <div className="topbar-settings-desktop" style={{ borderTop:`1px solid ${T.divider}` }}>
+        <div style={{ maxWidth:1440, margin:"0 auto", padding:"10px 16px" }}>
+          <SettingsControls kraj={kraj} setKraj={setKraj} city={city} setCity={setCity}
+            sens={sens} setSens={setSens} chosen={chosen} toggle={toggle} T={T} variant="row"/>
+        </div>
       </div>
 
-      {/* Settings (only for forecast) */}
-      {page === "forecast" && (
-        <div style={{ padding:"16px 20px", flex:1 }}>
-          <div style={{ height:1, background:T.divider, marginBottom:16 }}/>
-                    <div style={{ marginBottom:12 }}>
-            <span style={lblSt}>Kraj</span>
-            <select style={selSt} value={kraj} onChange={e=>setKraj(e.target.value)}>
-              {KRAJ_LIST.map(k=><option key={k}>{k}</option>)}
-            </select>
-          </div>
-          <div style={{ marginBottom:8 }}>
-            <span style={lblSt}>Okresné mesto</span>
-            <select style={selSt} value={city} onChange={e=>setCity(e.target.value)}>
-              {(TOWNS_BY_KRAJ[kraj]||[]).map(t=><option key={t.name}>{t.name}</option>)}
-            </select>
-          </div>
-          <div style={{ fontSize:11, color:T.textFaint, marginBottom:18, display:"flex", alignItems:"center", gap:5 }}>
-            <span>{isStationTown(city) ? "📡" : "≈"}</span>
-            <span>{isStationTown(city) ? "Monitorovacia stanica" : `Odhad zo stanice ${townStation(city)}`}</span>
-          </div>
-          <div style={{ marginBottom:18 }}>
-            <span style={{ fontSize:11, fontWeight:600, color:T.lbl, textTransform:"uppercase", letterSpacing:.8, display:"block", marginBottom:7 }}>Moje alergie</span>
-            <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
-              {Object.entries(POLLEN_DATA).map(([id,d]) => (
-                <button key={id} onClick={()=>toggle(id)} style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"5px 10px", border:`1.5px solid ${chosen.includes(id)?"#3A7D44":T.chipBorder}`, borderRadius:100, fontSize:12, fontWeight: chosen.includes(id)?600:400, color: chosen.includes(id)?"#166534":T.textMuted, cursor:"pointer", background: chosen.includes(id)?T.accentLight:T.chipBg, transition:"all .15s" }}>
-                  {d.emoji} {d.short}
-                </button>
-              ))}
+      {/* Mobil: rozbaľovacia lišta */}
+      <div className="topbar-settings-mobile" style={{ borderTop:`1px solid ${T.divider}` }}>
+        <button onClick={()=>setMOpen(o=>!o)} style={{ width:"100%", background:"none", border:"none",
+          cursor:"pointer", padding:"9px 16px", display:"flex", alignItems:"center", gap:10, textAlign:"left",
+          fontFamily:"'Inter',sans-serif" }}>
+          <span style={{ fontSize:14 }}>⚙️</span>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:12.5, fontWeight:600, color:T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+              📍 {city} · {nAll} {allWord} · {sens}
             </div>
           </div>
-          <div style={{ marginBottom:20 }}>
-            <span style={{ fontSize:11, fontWeight:600, color:T.lbl, textTransform:"uppercase", letterSpacing:.8, display:"block", marginBottom:7 }}>Citlivosť</span>
-            <div style={{ display:"flex", gap:5 }}>
-              {[["nízka","Nízka"],["stredná","Stredná"],["vysoká","Vysoká"]].map(([v,l])=>(
-                <button key={v} onClick={()=>setSens(v)} style={{ flex:1, padding:"7px 4px", border:`1.5px solid ${sens===v?"#3A7D44":T.inputBorder}`, borderRadius:7, fontSize:12, fontWeight: sens===v?600:400, fontFamily:"'Inter',sans-serif", cursor:"pointer", background: sens===v?T.accentLight:T.input, color: sens===v?"#166534":T.textMuted, transition:"all .15s" }}>{l}</button>
-              ))}
-            </div>
+          <span style={{ fontSize:12, color:T.textFaint, display:"inline-block", transition:"transform .2s",
+            transform: mOpen?"rotate(180deg)":"rotate(0deg)" }}>▼</span>
+        </button>
+        {mOpen && (
+          <div style={{ padding:"4px 16px 16px", animation:"fadeUp .2s ease both" }}>
+            <SettingsControls kraj={kraj} setKraj={setKraj} city={city} setCity={setCity}
+              sens={sens} setSens={setSens} chosen={chosen} toggle={toggle} T={T} variant="stack"/>
           </div>
-          <button disabled={!chosen.length} onClick={go} style={{ width:"100%", padding:"11px", background:"#1a3622", color:"#fff", border:"none", borderRadius:9, fontSize:13.5, fontWeight:600, fontFamily:"'Inter',sans-serif", cursor:"pointer", opacity: chosen.length?1:.4, transition:"all .15s" }}>
-            Zobraziť predpoveď
-          </button>
-        </div>
-      )}
-
-      {page === "almanach" && (
-        <div style={{ padding:"16px 20px", flex:1 }}>
-          <div style={{ height:1, background:T.divider, marginBottom:16 }}/>
-          <div style={{ fontSize:12.5, color:T.textMuted, lineHeight:1.7 }}>
-            Prehľad sezón kvitnutia všetkých alergénov na Slovensku.<br/><br/>
-            Klikni na riadok pre rozbalenie detailu.
-          </div>
-        </div>
-      )}
-
-      {/* Footer */}
-      <div style={{ padding:"14px 20px", borderTop:`1px solid ${T.sidebarBorder}` }}>
-        <div style={{ fontSize:11, color:T.textPlaceholder, lineHeight:1.6 }}>
-          Dáta: ÚVZ SR<br/>
-          23. týždeň 2026 · 8.6.2026
-        </div>
+        )}
       </div>
-    </aside>
+    </header>
   );
 }
 
@@ -2393,10 +2403,6 @@ function DynamicStyles({ T }) {
       }
       .lbl { color: ${T.lbl} !important; }
       body { background: ${T.bg}; transition: background .3s; }
-      .mobile-nav { background: ${T.navBg} !important; border-top: 1px solid ${T.navBorder} !important; }
-      .mobile-nav-btn { color: ${T.textFaint} !important; }
-      .mobile-nav-btn.on { color: ${T.accentText} !important; }
-      .mobile-back { background: ${T.card} !important; border-bottom: 1px solid ${T.cardBorder} !important; }
       ::-webkit-scrollbar-thumb { background: ${T.cardBorder}; }
       .cal-cat-label { background: ${T.bg} !important; }
       select { background: ${T.input} !important; color: ${T.text} !important; border-color: ${T.inputBorder} !important; }
@@ -2472,9 +2478,7 @@ export default function App() {
       .finally(() => setWeatherLoading(false));
   }, [city]);
 
-  // On mobile: show results screen OR setup screen (not both)
-  // isMobileResult = mobile + forecast exists + on forecast page
-  const showMobileResults = forecast && page === "forecast";
+  const showIntro = !forecast;
 
   return (
     <div style={{ minHeight:"100vh", background:T.bg, fontFamily:"'Inter',system-ui,sans-serif", transition:"background .3s" }}>
@@ -2485,87 +2489,32 @@ export default function App() {
         ::-webkit-scrollbar { width:4px; } ::-webkit-scrollbar-track { background:transparent; } ::-webkit-scrollbar-thumb { background:#D1D5DB; border-radius:2px; }
         .card { border-radius:14px; }
         .lbl { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.8px; display:block; margin-bottom:8px; }
-        .fc-mobile-settings { display:none; }
 
         /* ── DESKTOP ── */
-        .layout { display:flex; max-width:1440px; margin:0 auto; min-height:100vh; }
-        .sidebar-el { display:block; }
+        .app-main { max-width:1440px; margin:0 auto; }
         .top-grid { grid-template-columns:1fr 1fr 1fr; }
         .main-grid { grid-template-columns:1.2fr 1fr; }
-        .mobile-nav { display:none; }
-        .mobile-back { display:none; }
+        .topbar-settings-desktop { display:block; }
+        .topbar-settings-mobile  { display:none; }
 
         /* ── MOBILE ── */
         @media (max-width:768px) {
-          .layout { flex-direction:column; }
-
-          /* Mobile nav bar at bottom */
-          .mobile-nav {
-            display:flex;
-            position:fixed; bottom:0; left:0; right:0; z-index:100;
-            background:#fff; border-top:1px solid #EAECF0;
-            padding:8px 0 max(8px, env(safe-area-inset-bottom));
-          }
-          .mobile-nav-btn {
-            flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
-            background:none; border:none; cursor:pointer; padding:4px 0;
-            font-family:'Inter',sans-serif; font-size:10px; font-weight:500;
-            color:#9CA3AF; transition:color .15s;
-          }
-          .mobile-nav-btn.on { color:#166534; }
-
-          /* Sidebar becomes full-screen setup on mobile */
-          .sidebar-el {
-            width:100% !important; min-width:unset !important;
-            height:auto !important; position:static !important;
-            border-right:none !important;
-          }
-          /* Hide sidebar when showing results on mobile */
-          .sidebar-el.hidden-mobile { display:none !important; }
-          /* Hide main results when showing setup on mobile */
-          .main-hidden-mobile { display:none !important; }
-
-          /* Back bar on mobile results */
-          .mobile-back {
-            display:flex;
-            align-items:center; justify-content:space-between;
-            padding:12px 16px;
-            background:#fff; border-bottom:1px solid #EAECF0;
-            position:sticky; top:0; z-index:10;
-          }
-
           .top-grid { grid-template-columns:1fr !important; }
           .main-grid { grid-template-columns:1fr !important; }
+          .topbar-settings-desktop { display:none !important; }
+          .topbar-settings-mobile  { display:block !important; }
+          .brand-label { display:none !important; }
 
-          /* Add padding for bottom nav */
-          .main-content { padding-bottom:80px !important; }
-          .sidebar-inner { width:100% !important; height:auto !important; position:static !important; }
-          .sidebar-inner aside { padding-bottom:20px; }
-
-          /* Forecast carousel: 3 columns on mobile */
-          .forecast-carousel { grid-template-columns: repeat(3,1fr) !important; }
-          .forecast-carousel > *:nth-child(4) { display:none !important; }
-
-          /* No horizontal overflow anywhere */
           body, html { overflow-x:hidden; max-width:100vw; }
           * { max-width:100%; }
-
-          /* Season overview — stack vertically on mobile */
           .season-grid { grid-template-columns:1fr 1fr !important; }
-
-          /* Calendar — mobile layout */
           .cal-header { display:none !important; }
           .cal-cat-label { font-size:12px !important; padding:8px 12px !important; }
           .cal-row-desktop { display:none !important; }
           .cal-row-mobile { display:block !important; }
           .cal-detail-grid { grid-template-columns:1fr !important; }
-
-          /* Forecast page padding */
           .forecast-page { padding:16px 14px 24px !important; }
-          .fc-mobile-settings { display:block !important; }
           .almanach-page { padding:16px 14px 24px !important; }
-
-          /* Legend wrap */
           .legend-bar { flex-wrap:wrap !important; gap:10px !important; }
           .legend-bar .legend-right { margin-left:0 !important; width:100%; }
         }
@@ -2573,49 +2522,23 @@ export default function App() {
 
       <DynamicStyles T={T}/>
       {consent === null && <CookieBanner onConsent={handleConsent} T={T}/>}
-      <div className="layout">
 
-        {/* Sidebar — hidden on mobile when showing results */}
-        <div className={`sidebar-el${showMobileResults ? " hidden-mobile" : ""}`}>
-          <Sidebar page={page} setPage={setPage} city={city} setCity={setCity} kraj={kraj} setKraj={chooseKraj} chosen={chosen} toggle={toggle} sens={sens} setSens={setSens} go={go} T={T} dark={dark} setDark={setDark}/>
+      {showIntro ? (
+        <IntroScreen kraj={kraj} setKraj={chooseKraj} city={city} setCity={setCity}
+          sens={sens} setSens={setSens} chosen={chosen} toggle={toggle} go={go}
+          T={T} dark={dark} setDark={setDark}/>
+      ) : (
+        <div>
+          <TopBar page={page} setPage={setPage} kraj={kraj} setKraj={chooseKraj} city={city} setCity={setCity}
+            sens={sens} setSens={setSens} chosen={chosen} toggle={toggle} onNew={()=>setForecast(null)}
+            T={T} dark={dark} setDark={setDark}/>
+          <main className="app-main" style={{ paddingBottom: consent===null ? 80 : 0 }}>
+            {page === "forecast" && <ForecastPage city={city} chosen={chosen} sens={sens} forecast={forecast} setForecast={setForecast} weather={weather} weatherLoading={weatherLoading} kraj={kraj} setCity={setCity} setKraj={chooseKraj} setSens={setSens} toggle={toggle} T={T}/>}
+            {page === "mapa" && <MapaPage chosen={chosen} sens={sens} toggle={toggle} setCity={setCity} setPage={setPage} T={T}/>}
+            {page === "almanach" && <AlmanachPage T={T}/>}
+          </main>
         </div>
-
-        {/* Main content */}
-        <main className={`main-content${!showMobileResults && page==="forecast" ? " main-hidden-mobile" : ""}`}
-          style={{ flex:1, overflowY:"auto", paddingBottom: consent===null ? 80 : 0 }}>
-
-          {/* Mobile back bar — only visible on mobile when showing results */}
-          {page === "forecast" && forecast && (
-            <div className="mobile-back">
-              <button onClick={()=>setForecast(null)} style={{ display:"flex", alignItems:"center", gap:8, background:"none", border:"none", cursor:"pointer", fontSize:14, fontWeight:600, color:T.accentText, fontFamily:"'Inter',sans-serif" }}>
-                ← Zmeniť nastavenia
-              </button>
-              <button onClick={()=>setForecast(calcForecast(city,chosen,sens))} style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 12px", background:"#F0FDF4", border:"1px solid #86efac", borderRadius:8, fontSize:13, fontWeight:500, color:"#166534", cursor:"pointer", fontFamily:"'Inter',sans-serif" }}>
-                ↺ Obnoviť
-              </button>
-            </div>
-          )}
-
-          {page === "forecast" && <ForecastPage city={city} chosen={chosen} sens={sens} forecast={forecast} setForecast={setForecast} weather={weather} weatherLoading={weatherLoading} kraj={kraj} setCity={setCity} setKraj={chooseKraj} setSens={setSens} toggle={toggle} T={T}/>}
-          {page === "mapa" && <MapaPage chosen={chosen} sens={sens} toggle={toggle} setCity={setCity} setPage={setPage} T={T}/>}
-          {page === "almanach" && <AlmanachPage T={T}/>}
-        </main>
-      </div>
-
-      {/* Mobile bottom nav */}
-      <nav className="mobile-nav">
-        {[
-          { id:"forecast", label:"Predpoveď", icon:"📊" },
-          { id:"mapa",     label:"Mapa", icon:"🗺️" },
-          { id:"almanach", label:"Kalendár", icon:"📅" },
-        ].map(n => (
-          <button key={n.id} className={`mobile-nav-btn${page===n.id?" on":""}`}
-            onClick={()=>{ setPage(n.id); if(n.id!=="forecast") setForecast(null); }}>
-            <span style={{ fontSize:22 }}>{n.icon}</span>
-            {n.label}
-          </button>
-        ))}
-      </nav>
+      )}
     </div>
   );
 }
