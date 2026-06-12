@@ -2158,32 +2158,8 @@ function MapaPage({ chosen, sens, toggle, setCity, setPage, T }) {
         <p style={{ fontSize:14, color:T.textMuted, maxWidth:660, lineHeight:1.6 }}>
           Klikni na kraj pre jeho okresné mestá, potom na mesto pre detailnú predpoveď.
           Farba kraja = celkové riziko pre tvoje alergény pre zvolený deň (podľa jeho monitorovacej stanice a nášho modelu).
-          {chosen.length === 0 && " Vyber alergény nižšie pre presnejšiu mapu."}
+          {chosen.length === 0 && " Vyber alergény v hornej lište pre presnejšiu mapu."}
         </p>
-      </div>
-
-      {/* Allergen selector */}
-      <div style={{ marginBottom:18 }}>
-        <div style={{ fontSize:11, color:T.textFaint, marginBottom:7, textTransform:"uppercase", letterSpacing:.5 }}>
-          Vaše alergény {chosen.length === 0 && "— vyberte aspoň jeden"}
-        </div>
-        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-          {Object.entries(POLLEN_DATA).map(([id,d]) => {
-            const active = chosen.includes(id);
-            return (
-              <button key={id} onClick={()=>toggle(id)} style={{
-                display:"inline-flex", alignItems:"center", gap:4, padding:"5px 11px",
-                border:`1.5px solid ${active?"#3A7D44":T.chipBorder}`, borderRadius:100,
-                fontSize:12.5, fontWeight: active?600:400,
-                color: active?"#166534":T.textMuted,
-                background: active?T.accentLight:T.chipBg,
-                cursor:"pointer", transition:"all .15s", fontFamily:"'Inter',sans-serif",
-              }}>
-                {d.emoji} {d.short}
-              </button>
-            );
-          })}
-        </div>
       </div>
 
       {/* Prepínač dní — kraje sa prefarbia podľa modelu pre zvolený deň */}
