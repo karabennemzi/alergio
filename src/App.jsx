@@ -314,22 +314,21 @@ const FENO = {
 };
 
 // Ikona dňa — denný weathercode z Open-Meteo často hlási „najhoršie" počasie dňa
-// (aj krátku popoludňajšiu prehánku), preto by slnečný deň dostal dažďovú ikonu.
-// Rozhodujeme preto kombináciou: reálne zrážky + oblačnosť; kód len pre búrku/sneh/hmlu.
+// (aj krátku prehánku) a denný cloudcover_mean ráta aj noc (kde býva viac oblačnosti).
+// Preto: prah dažďa = 0,5 mm (zhodný s textom „Bez zrážok"), oblačnosť z DENNÝCH hodín.
 function dayEmoji(code = 1, rain = 0, clouds = 50) {
   rain = rain || 0;
   clouds = (clouds === undefined || clouds === null) ? 50 : clouds;
-  if (code >= 95)                                              return rain >= 0.3 ? "⛈️" : "🌦️"; // búrka
+  if (code >= 95)                                              return rain >= 0.5 ? "⛈️" : "🌦️"; // búrka
   if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "🌨️"; // sneženie
   if (code === 45 || code === 48)                              return "🌫️"; // hmla
   if (rain >= 5)                                               return "🌧️"; // výdatný dážď
-  if (rain >= 1)                                               return "🌦️"; // dážď / prehánky
-  if (rain >= 0.2)                                             return "🌦️"; // mrholenie / slabé prehánky
-  // bez zrážok → podľa oblačnosti
-  if (clouds < 20)                                             return "☀️";
-  if (clouds < 55)                                             return "🌤️";
-  if (clouds < 85)                                             return "⛅";
-  return "☁️";
+  if (rain >= 0.5)                                             return "🌦️"; // dážď / prehánky (zhoda s „💧 mm")
+  // bez zrážok (< 0,5 mm) → podľa dennej oblačnosti
+  if (clouds < 25)                                             return "☀️";  // jasno
+  if (clouds < 50)                                             return "🌤️"; // polojasno
+  if (clouds < 80)                                             return "⛅";  // oblačno
+  return "☁️";                                                              // zamračené
 }
 
 // Výpočet počasieho faktora pre peľ
@@ -452,7 +451,7 @@ const WEATHER_TTL = 60 * 60 * 1000; // 1 hodina
 
 function weatherCacheGet(city) {
   try {
-    const raw = localStorage.getItem(`alergio_wx_${city}`);
+    const raw = localStorage.getItem(`alergio_wx2_${city}`);
     if (!raw) return null;
     const { ts, data } = JSON.parse(raw);
     if (Date.now() - ts > WEATHER_TTL) return null;
@@ -462,7 +461,7 @@ function weatherCacheGet(city) {
 
 function weatherCacheSet(city, data) {
   try {
-    localStorage.setItem(`alergio_wx_${city}`,
+    localStorage.setItem(`alergio_wx2_${city}`,
       JSON.stringify({ ts: Date.now(), data }));
   } catch {}
 }
@@ -505,16 +504,24 @@ async function fetchWeather(city) {
         };
       })
     );
-    const result = d.time.map((date, i) => ({
-      date,
-      temp:   d.temperature_2m_max[i]  || 20,
-      rain:   d.precipitation_sum[i]   || 0,
-      wind:   d.windspeed_10m_max[i]   || 10,
-      clouds: d.cloudcover_mean[i]     || 30,
-      wmo:    d.weathercode[i]         || 1,
-      emoji:  dayEmoji(d.weathercode[i], d.precipitation_sum[i], d.cloudcover_mean[i]),
-      hourly: hourlyByDay[i] || [],
-    }));
+    const result = d.time.map((date, i) => {
+      const hrs = hourlyByDay[i] || [];
+      // Denná oblačnosť (7–20 h) — bez nočných hodín, ktoré nadhodnocujú oblačnosť
+      const dayHrs = hrs.filter(x => x.hour >= 7 && x.hour <= 20);
+      const dayClouds = dayHrs.length
+        ? dayHrs.reduce((s,x)=>s+(x.clouds ?? 50), 0) / dayHrs.length
+        : (d.cloudcover_mean[i] ?? 50);
+      return {
+        date,
+        temp:   d.temperature_2m_max[i]  || 20,
+        rain:   d.precipitation_sum[i]   || 0,
+        wind:   d.windspeed_10m_max[i]   || 10,
+        clouds: d.cloudcover_mean[i]     || 30,
+        wmo:    d.weathercode[i]         || 1,
+        emoji:  dayEmoji(d.weathercode[i], d.precipitation_sum[i], dayClouds),
+        hourly: hrs,
+      };
+    });
     weatherCacheSet(city, result);
     return result;
   } catch (e) {
